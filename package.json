@@ -2,7 +2,7 @@
   "name": "training-pwa",
   "private": true,
   "license": "MIT",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Lokale Offline-PWA zum Abarbeiten und Protokollieren eines Krafttrainingsplans",
   "type": "module",
   "engines": {

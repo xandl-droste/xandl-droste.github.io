@@ -5,7 +5,7 @@
 // Integrität: Jede Datei wird gegen ihren SHA-256 geprüft, beim Installieren und bei jeder Auslieferung aus dem Cache.
 // So kann eine andere Seite derselben Origin (z. B. ein weiteres GitHub-Pages-Projekt) den Cache nicht unbemerkt verändern.
 
-const VERSION = '2a26e7506148';
+const VERSION = '4c3777c98991';
 const PRECACHE = [
   './',
   './css/app.css',
@@ -57,7 +57,7 @@ const HASHES = {
   './src/agent-prompt.js': '60a0027d31a2d3b4f7634c71c5c28fac959ca6cc3877353210c5f166e0e9607e',
   './src/app.js': '5dd3614151d2b9b931ad3a989f3d2535bfe0529dde5d79d77430428d07c4e248',
   './src/dom.js': '921a23af64da7b2806ba47122b6f4f96866f4fbc0b8b7ec311c32de164eb0470',
-  './src/export.js': '4681ef52d649ec755de11a3ef6e08ffbb659934b69c79c9bdf39ab9784d0dc0f',
+  './src/export.js': '83747120cde0d025608b60460b6e86bdc35e7e04f52f6cad1e5c09204fa4763c',
   './src/format.js': '1d76cc1642fd5089ba43b157ec99f67d4a2473d142dda37ef9e3a6ef785d6d26',
   './src/garmin/categories.js': 'dfb3e423ac9470e6416920600cb45550496d40e289473425f31ed1ad2daf32fa',
   './src/garmin/fit.js': '847268996bab34f2fec4c3c2c343cf54e61d463996dd8dff4385418fdb1699dd',
@@ -77,7 +77,7 @@ const HASHES = {
   './src/model/weeks.js': 'd05245a09b68fecd4bc81b07da718bcb156c0be54f295f41dbe26006b54e7520',
   './src/sound.js': '02cf03e9826a090dae8162f57f34488d26a401a134a2e8598ba38d03867c447d',
   './src/storage.js': '2a6c810c1c84aa4bbc527b6025151d80cecc978ba6ecd4ad78ae3bf26beb2e63',
-  './src/version.js': '5c30315b6f9ab1df4c1933d2a3917de8f60a5b1e32d4b80bdcbd809d099ecf17',
+  './src/version.js': 'c54bb5e68c588f9ca0b9e73b2d94a0d3ab3eb9b9244dc58d03344be475829716',
   './src/views/history.js': 'c0a77f80ea17f01151d45a9e19faf7f5413ab4cfe467721d1c6b73c67836bf8c',
   './src/views/info.js': '93376de64bf4622330a76d0cd9e1116f29a97b32115492136dd2a278b00e6ebe',
   './src/views/live.js': '944705bd80229f03765f13f2df3c8fa92dec5aa4e56871c5919d3280c8d71803',
