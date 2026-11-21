@@ -12,6 +12,16 @@ Die Trainings-PWA liegt im Unterordner `training/` und läuft unter `https://xan
 - `develop` → `main`: **immer Merge-Commit** (`git merge --no-ff`), nie Squash, nie Fast-Forward.
 - Kein Force-Push auf `main` oder `develop`.
 
+## Versionen
+
+- Die Version steht nur in `package.json` (`MAJOR.MINOR.PATCH`). `npm run sw` schreibt sie nach `training/src/version.js`, die Info-Seite zeigt sie an.
+- **Major:** Bestehende Daten oder ältere App-Stände sind nicht mehr kompatibel (`SCHEMA_VERSION` steigt, alte Backups oder Pläne brauchen eine Migration, neue Exporte sind für alte Versionen unlesbar, das Planformat für den KI-Prompt ändert sich inkompatibel). Ein Test prüft: Major-Version = `SCHEMA_VERSION`.
+- **Minor:** neue Funktionen, alle bestehenden Daten funktionieren weiter (z. B. neue optionale Felder).
+- **Patch:** Fehlerbehebungen und Textkorrekturen ohne neues Verhalten.
+- Version erhöhen auf dem Feature-Branch, zusammen mit einem Eintrag in `CHANGELOG.md`, danach `npm run sw`.
+- Jeder Merge `develop` → `main`, der die App ändert, bekommt eine neue Version und einen Tag: `git tag vX.Y.Z` auf dem Merge-Commit, dann `git push origin main vX.Y.Z`. Merges, die nur `docs/` oder `reviews/` betreffen, bekommen keine Version und keinen Tag.
+- Tags `v*` sind per Ruleset geschützt (nicht verschieben, nicht löschen).
+
 ## Persönliche Daten
 
 - Das Repo ist öffentlich. Keine Klarnamen, Wohnorte oder privaten Mailadressen in Code, README, Manifest, Metadaten oder Commits. Einzige Ausnahme sind die Betreiberangaben (siehe nächster Punkt).

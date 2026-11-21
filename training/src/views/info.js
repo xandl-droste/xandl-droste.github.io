@@ -2,6 +2,7 @@
 
 import { h } from '../dom.js';
 import { NAME, WOHNORT, KONTAKT_MAIL, OPEN_SOURCE } from '../legal.js';
+import { APP_VERSION } from '../version.js';
 
 const GITHUB_PRIVACY = 'https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement';
 
@@ -39,5 +40,6 @@ export function infoScreen(onBack) {
       OPEN_SOURCE.length
         ? h('ul', {}, OPEN_SOURCE.map((c) => h('li', {}, `${c.name} – ${c.license}`)))
         : h('p', { class: 'mut' }, 'Keine eingebunden.')),
+    h('p', { class: 'mut small' }, `Version ${APP_VERSION}`),
   ];
 }
