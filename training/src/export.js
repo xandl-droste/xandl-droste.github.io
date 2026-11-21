@@ -19,7 +19,8 @@ export async function shareOrDownload(blob, name, type) {
   }
   if (shareFile && navigator.canShare && navigator.canShare({ files: [shareFile] })) {
     try {
-      await navigator.share({ files: [shareFile], title: name });
+      // Nur die Datei teilen: iOS legt title/text beim Sichern in „Dateien“ als zusätzliche Textdatei ab.
+      await navigator.share({ files: [shareFile] });
       return { ok: true, method: 'share' };
     } catch (e) {
       if (e?.name === 'AbortError') return { ok: false, aborted: true };
