@@ -1,0 +1,149 @@
+<!doctype html>
+<!-- Nur visuelle Vorlage (Aufbau und Look). Nicht Teil der App: nutzt innerHTML und Dummy-Daten. -->
+<html lang="de" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Trainings-App Prototyp</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f4f6f4;--bgimg:none;--card:#fff;--row:#eef2ef;--text:#14201b;--mut:#55635c;--ac:#0F6E56;--acbg:#0F6E56;--acText:#fff;--line:#d9e0dc;--r:16px;--tab:rgba(244,246,244,.94);--blur:none}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]):not([data-theme="fancy"]){--bg:#0f1412;--card:#19201d;--row:#1f2a25;--text:#f2f5f3;--mut:#9aa8a2;--ac:#3ddc97;--acbg:#3ddc97;--acText:#0f1412;--line:#2a3530;--tab:rgba(15,20,18,.94)}}
+:root[data-theme="dark"]{--bg:#0f1412;--card:#19201d;--row:#1f2a25;--text:#f2f5f3;--mut:#9aa8a2;--ac:#3ddc97;--acbg:#3ddc97;--acText:#0f1412;--line:#2a3530;--tab:rgba(15,20,18,.94)}
+:root[data-theme="fancy"]{--bg:#1b1038;--bgimg:linear-gradient(160deg,#2a1457 0%,#4b1d6b 45%,#0f3a5a 100%);--card:rgba(255,255,255,.12);--row:rgba(255,255,255,.1);--text:#fff;--mut:#d3c7ee;--ac:#ffd166;--acbg:linear-gradient(135deg,#ffd166,#ff7ad9);--acText:#1b1038;--line:rgba(255,255,255,.22);--r:22px;--tab:rgba(27,16,56,.88);--blur:blur(14px)}
+*{box-sizing:border-box}
+body{margin:0;background-color:var(--bg);background-image:var(--bgimg);background-attachment:fixed;color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;min-height:100dvh}
+#app{max-width:430px;margin:0 auto;min-height:100dvh;display:flex;flex-direction:column;gap:12px;padding:0 16px 16px}
+h1{font-size:26px;margin:4px 0}h2{font-size:21px;margin:2px 0}h3{font-size:16px;margin:0}p{margin:4px 0}
+.mut{color:var(--mut);font-size:14px}.center{text-align:center}
+button{font:inherit;color:var(--text);cursor:pointer}
+.strip{display:flex;justify-content:space-between;align-items:center;padding-top:10px}
+.seg,.seg2{display:flex;gap:4px;background:var(--row);border-radius:12px;padding:3px}
+.seg button,.seg2 button{min-height:44px;padding:0 12px;border:0;border-radius:10px;background:transparent;font-size:14px}
+button[aria-pressed="true"]{background:var(--acbg);color:var(--acText);font-weight:700}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:10px;backdrop-filter:var(--blur)}
+.btn{min-height:52px;padding:0 20px;border:0;border-radius:14px;background:var(--acbg);color:var(--acText);font-weight:700;font-size:17px}
+.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line);font-weight:500;font-size:15px}
+.btn.sm{min-height:48px;padding:0 14px;font-size:15px}
+.big-btn{min-height:72px;font-size:22px;border-radius:20px;margin-top:auto}
+.hero{margin-top:12vh;display:flex;flex-direction:column;gap:8px}
+.logo{font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ac);font-size:14px}
+.top{display:flex;justify-content:space-between;align-items:flex-end}
+.bar{height:4px;background:var(--row);border-radius:2px}.bar i{display:block;height:4px;border-radius:2px;background:var(--acbg)}
+.row2{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.row{display:flex;align-items:center;gap:12px;min-height:60px;border-radius:12px;padding:0 8px 0 12px;background:var(--row);border:2px solid transparent}
+.row.act{border-color:var(--ac)}.row b{flex:1;font-size:18px;font-variant-numeric:tabular-nums}.row .n{width:20px;color:var(--mut)}
+.chk{width:44px;height:44px;border-radius:22px;border:2px solid var(--ac);background:transparent;display:flex;align-items:center;justify-content:center;flex:none}
+.chk.on{background:var(--acbg);border-color:transparent}
+.g4{display:grid;grid-template-columns:24px 1fr 1fr 48px;gap:8px;align-items:center}
+.g4.row{padding:0 8px}
+.stp{display:flex;align-items:center;justify-content:space-between}
+.rb{width:64px;height:64px;border-radius:32px;border:1px solid var(--line);background:transparent;font-size:32px}
+.num{font-size:56px;font-weight:700;font-variant-numeric:tabular-nums}
+.dots{display:flex;gap:8px;align-items:center;justify-content:center}.dots i{width:10px;height:10px;border-radius:5px;background:var(--row)}.dots i.on{background:var(--ac)}
+.rest{flex-direction:row;align-items:center;gap:10px;margin-top:auto;position:sticky;bottom:8px;background:var(--tab);backdrop-filter:blur(10px);z-index:2}.rest>div{flex:1}.big{font-size:28px;font-variant-numeric:tabular-nums}
+.scale{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}.scale button{min-height:44px;border:1px solid var(--line);border-radius:10px;background:transparent}
+.chips{display:flex;gap:8px}.chips button{flex:1;min-height:44px;border:1px solid var(--line);border-radius:12px;background:transparent}
+.tabs{margin-top:auto;position:sticky;bottom:0;display:flex;gap:6px;padding:8px 0;background:var(--tab);backdrop-filter:blur(8px)}
+.tabs button{flex:1;min-height:48px;border:0;border-radius:12px;background:transparent;color:var(--mut)}
+.tabs button[aria-current="true"]{background:var(--row);color:var(--text);font-weight:700}
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:5}
+.sheet .card{width:100%;max-width:430px;border-radius:22px 22px 0 0;background:var(--bg);background-image:var(--bgimg);max-height:88dvh;overflow:auto;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}
+pre{white-space:pre-wrap;font:13px/1.4 ui-monospace,monospace;background:var(--row);border-radius:12px;padding:12px;max-height:180px;overflow:auto;margin:0}
+.toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:12px 18px;border-radius:12px;font-size:14px;z-index:9}
+.tag{font-size:12px;padding:3px 8px;border-radius:8px;background:var(--row);color:var(--mut)}
+.link{min-height:44px;padding:0 4px;border:0;background:transparent;color:var(--ac);font-size:15px;font-weight:700}
+.menu{position:absolute;top:6px;right:12px;width:44px;height:44px;border:0;border-radius:12px;background:var(--row);display:flex;align-items:center;justify-content:center;z-index:3}
+#app{position:relative;padding-top:6px}
+.sheet .seg button{flex:1}
+@media (max-width:400px){#app{padding:0 12px 12px;gap:8px}h1{font-size:22px}.card{padding:12px;gap:8px}.num{font-size:44px}.rb{width:52px;height:52px;font-size:28px}.big-btn{min-height:64px;font-size:20px}.hero{margin-top:6vh}.btn{min-height:50px}.row{min-height:56px}.big{font-size:24px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const CH='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-9"/></svg>';
+const PROMPT='Du bist ein erfahrener Kraft- und Athletiktrainer. Berate mich ZUERST und stelle gezielte Fragen zu Zielen, Zeit pro Woche, Erfahrung, Equipment, Einschränkungen und Sportart. Erst nach meiner Bestätigung erzeugst du genau EINE gültige JSON-Datei plan.json (nur Codeblock, ohne Kommentare) nach diesem Schema: schemaVersion, sessions[] > blocks[] (single oder superset) > exercises[] mit id, name, sets, repsMin, repsMax, unit, perSide, restSec, incrementKg, cue, byWeek. Hier folgt das vollständige Schema mit einer Beispieldatei …';
+const S={screen:'onboard',mode:'list',theme:'dark',wk:3,saved:0,rest:0,sheet:0,menu:0,copied:0,toast:'',
+sq:[{kg:80,r:5,d:1},{kg:80,r:5,d:1},{kg:82.5,r:5,d:0}],su:[{a:8,b:12,d:1},{a:8,b:12,d:0},{a:6,b:12,d:0}]};
+const $=s=>document.querySelector(s);
+const fmt=s=>Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+const kg=n=>String(n).replace('.',',');
+const TH={light:'Hell',dark:'Dunkel',fancy:'Fancy'};
+const tabs=()=>`<nav class="tabs">${[['home','Heute'],['hist','Verlauf'],['plan','Plan']].map(([k,l])=>`<button data-act="go" data-v="${k}" aria-current="${S.screen===k}">${l}</button>`).join('')}</nav>`;
+const stp=(l,v,u,k)=>`<div class="card center"><div class="mut">${l}</div><div class="stp"><button class="rb" aria-label="weniger" data-act="step" data-k="${k}" data-d="-1">−</button><div><span class="num">${v}</span> <span class="mut">${u}</span></div><button class="rb" aria-label="mehr" data-act="step" data-k="${k}" data-d="1">+</button></div></div>`;
+
+const V={
+onboard:()=>`<div class="hero"><div class="logo">Training</div><h1>Hast du schon einen Plan?</h1><p class="mut">Pläne und Verlauf liegen als Dateien bei dir. Es wird nichts hochgeladen.</p></div>
+<div style="margin-top:auto;display:flex;flex-direction:column;gap:10px"><button class="btn" data-act="open">Plan öffnen</button><button class="btn ghost" data-act="sheet">Neuen Plan erstellen</button></div>`,
+home:()=>`<h1>Heute</h1>
+<div class="card"><div class="mut">Nächste Einheit</div><h2>Einheit 1 · schwer</h2><p class="mut">Woche ${S.wk} von 7 · RIR 2 · 6 Blöcke · ca. 80 Min</p><button class="btn" data-act="start">Training starten</button></div>
+
+<div class="card"><h3>Backup</h3><p class="mut">${S.saved?'Alle Sessions gesichert.':'1 Session noch nicht gesichert.'}</p>${S.saved?'':'<button class="btn ghost" data-act="export">Jetzt sichern</button>'}</div>`,
+live:()=>{const n=S.sq.filter(s=>s.d).length+S.su.filter(s=>s.d).length;
+return `<div class="top"><div><div class="mut">Einheit 1 · Woche ${S.wk}</div><h1>Training</h1></div></div>
+<div class="bar"><i style="width:${n/6*100}%"></i></div><div class="row2"><span class="mut">${n} von 6 Sätzen</span><button class="link" data-act="finish">Beenden</button></div>
+${S.mode==='list'?list():focus()}
+<div class="card rest"><div><div class="mut">${S.rest>0?'Pause':'Bereit'}</div><b class="big">${fmt(S.rest)}</b></div>${S.rest>0?'<button class="btn ghost sm" data-act="plus">+30 s</button><button class="btn sm" data-act="skip">Weiter</button>':''}</div>
+`},
+done:()=>`<h1>Training abgeschlossen</h1>
+<div class="card"><h3>Einheit 1 · Woche ${S.wk}</h3><p class="mut">Alle geplanten Blöcke erledigt · ca. 41 Min</p></div>
+
+<div class="card"><h3>Export</h3><p class="mut">2026-11-14_einheit1.json</p><p class="mut">Im Teilen-Menü „In Dateien sichern“ wählen.</p><button class="btn" data-act="export2">Als Datei sichern</button></div>`,
+hist:()=>{const w=[75,77.5,80,80],pts=w.map((x,i)=>[20+i*86,70-(x-75)/7.5*55]);
+return `<h1>Verlauf</h1><div class="card"><h3>Back Squat · Top-Satz (kg)</h3><svg viewBox="0 0 300 90" role="img" aria-label="Verlauf Back Squat 75 bis 80 kg"><polyline fill="none" stroke="var(--ac)" stroke-width="3" points="${pts.map(p=>p.join(',')).join(' ')}"/>${pts.map((p,i)=>`<circle cx="${p[0]}" cy="${p[1]}" r="5" fill="var(--ac)"/><text x="${p[0]}" y="88" text-anchor="middle" font-size="11" fill="var(--mut)">${kg(w[i])}</text>`).join('')}</svg></div>
+${[['Do 12.11.','Einheit 1 · Woche 2'],['So 08.11.','Einheit 2 · Woche 2'],['Do 05.11.','Einheit 1 · Woche 1']].map(([d,t])=>`<div class="card"><div class="row2"><h3>${d}</h3><span class="tag">gesichert</span></div><p class="mut">${t}</p></div>`).join('')}`},
+plan:()=>`<h1>Plan</h1>
+<div class="card"><h3>Aktueller Plan</h3><p class="mut">2 Einheiten pro Woche · 7 Wochen · plan.json</p><div class="stp"><span>Woche</span><div style="display:flex;align-items:center;gap:14px"><button class="rb" style="width:48px;height:48px;font-size:24px" aria-label="Woche zurück" data-act="wk" data-d="-1">−</button><b style="font-size:20px">${S.wk}</b><button class="rb" style="width:48px;height:48px;font-size:24px" aria-label="Woche vor" data-act="wk" data-d="1">+</button></div></div></div>
+<button class="btn ghost" data-act="open">Plan öffnen (Datei)</button><button class="btn ghost" data-act="sheet">Plan mit KI erstellen oder anpassen</button><button class="btn ghost" data-act="export">Backup erstellen</button>`};
+
+function list(){const a=S.sq.findIndex(s=>!s.d);
+return `<div class="card"><div class="row2"><h3>Back Squat</h3><span class="mut">3 × 5 · letztes Mal 80 kg</span></div>
+${S.sq.map((s,i)=>`<div class="row ${i===a?'act':''}"><span class="n">${i+1}</span><b>${kg(s.kg)} kg × ${s.r}</b><button class="chk ${s.d?'on':''}" aria-label="Satz ${i+1} abschließen" data-act="tsq" data-v="${i}">${s.d?CH:''}</button></div>`).join('')}
+<button class="btn ghost" data-act="sug">Alle Wdh. geschafft: +2,5 kg vorschlagen</button></div>
+<div class="card"><h3>Superset · Klimmzug + Tibialis-Raise</h3><div class="g4 mut"><span></span><span>a Klimmzug</span><span>b Tibialis</span><span></span></div>
+${S.su.map((s,i)=>`<div class="g4 row"><span class="n">${i+1}</span><b style="font-size:17px">${s.a} Wdh.</b><b style="font-size:17px">${s.b} Wdh.</b><button class="chk ${s.d?'on':''}" aria-label="Superset-Satz ${i+1} abschließen" data-act="tsu" data-v="${i}">${s.d?CH:''}</button></div>`).join('')}</div>
+<div class="card mut">Nächster Block: RDL · 3 × 6–8</div>`}
+function focus(){const i=S.sq.findIndex(s=>!s.d);
+if(i<0)return `<div class="card center"><h2>Back Squat fertig</h2><p class="mut">Weiter mit dem Superset.</p><button class="btn" data-act="mode" data-v="list">Zur Liste</button></div>`;
+const s=S.sq[i];
+return `<div class="dots mut">Satz ${i+1} von 3 ${S.sq.map(x=>`<i class="${x.d?'on':''}"></i>`).join('')}</div><p class="mut center">Letztes Mal: 80 kg × 5 · Ziel: 5 Wdh.</p>${stp('Gewicht',kg(s.kg),'kg','kg')}${stp('Wiederholungen',s.r,'','r')}<button class="btn big-btn" data-act="tsq" data-v="${i}">Satz fertig</button>`}
+function sheet(){return `<div class="sheet" data-act="close"><div class="card" data-keep="1"><h2>Neuen Plan erstellen</h2><p class="mut">Kopiere den Prompt in einen KI-Agenten deiner Wahl. Er berät dich und liefert eine plan.json, die du danach hier öffnest.</p><pre>${PROMPT}</pre>
+<div style="display:flex;gap:10px"><button class="btn sm" style="flex:1" data-act="copy">${S.copied?'Kopiert':'Kopieren'}</button><button class="btn ghost sm" style="flex:1" data-act="share">Teilen</button></div>
+<button class="btn ghost" data-act="open">plan.json jetzt öffnen</button><button class="btn ghost" data-act="close">Schließen</button></div></div>`}
+function menuBtn(){return `<button class="menu" data-act="menu" aria-label="Menü"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>`}
+function menuSheet(){return `<div class="sheet" data-act="closeMenu"><div class="card" data-keep="1"><h2>Menü</h2><div><div class="mut">Stil</div><div class="seg">${Object.keys(TH).map(t=>`<button data-act="theme" data-v="${t}" aria-pressed="${S.theme===t}">${TH[t]}</button>`).join('')}</div></div><div><div class="mut">Ansicht im Training</div><div class="seg">${[['list','Liste'],['focus','Fokus']].map(([m,l])=>`<button data-act="mode" data-v="${m}" aria-pressed="${S.mode===m}">${l}</button>`).join('')}</div></div><button class="btn ghost" data-act="closeMenu">Schließen</button></div></div>`}
+function render(){document.documentElement.dataset.theme=S.theme;
+$('#app').innerHTML=menuBtn()+V[S.screen]()+(['home','hist','plan'].includes(S.screen)?tabs():'')+(S.sheet?sheet():'')+(S.menu?menuSheet():'')+(S.toast?`<div class="toast" role="status">${S.toast}</div>`:'')}
+function toast(m){S.toast=m;render();setTimeout(()=>{S.toast='';render()},2200)}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;
+if((b.dataset.act==='close'||b.dataset.act==='closeMenu')&&e.target.closest('[data-keep]')&&!e.target.closest('button'))return;
+const v=b.dataset.v,a=b.dataset.act;
+if(a==='theme')S.theme=v;
+else if(a==='go')S.screen=v;
+else if(a==='open'){S.sheet=0;S.screen='home';render();return toast('plan.json geladen (Prototyp)')}
+else if(a==='sheet')S.sheet=1;
+else if(a==='close')S.sheet=0;
+else if(a==='menu')S.menu=1;
+else if(a==='closeMenu')S.menu=0;
+else if(a==='copy'){try{navigator.clipboard.writeText(PROMPT)}catch(_){}S.copied=1}
+else if(a==='share'){try{navigator.share({text:PROMPT})}catch(_){}}
+else if(a==='start'){S.screen='live';S.rest=0}
+else if(a==='mode')S.mode=v;
+else if(a==='tsq'){const s=S.sq[+v];s.d=s.d?0:1;S.rest=s.d?180:0}
+else if(a==='tsu'){const s=S.su[+v];s.d=s.d?0:1;S.rest=s.d?90:0}
+else if(a==='sug'){S.sq.forEach(s=>{if(!s.d)s.kg+=2.5});render();return toast('+2,5 kg übernommen')}
+else if(a==='step'){const s=S.sq.find(x=>!x.d);if(s){if(b.dataset.k==='kg')s.kg=Math.max(0,s.kg+2.5*b.dataset.d);else s.r=Math.max(1,s.r+ +b.dataset.d)}}
+else if(a==='plus')S.rest+=30;
+else if(a==='skip')S.rest=0;
+else if(a==='finish')S.screen='done';
+else if(a==='wk')S.wk=Math.min(7,Math.max(1,S.wk+ +b.dataset.d));
+else if(a==='export'||a==='export2'){S.saved=1;S.screen='home';render();return toast('Gesichert (Prototyp)')}
+render()});
+setInterval(()=>{if(S.rest>0){S.rest--;if(S.screen==='live')render()}},1000);
+render();
+</script>
+</body>
+</html>

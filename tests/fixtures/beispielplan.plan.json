@@ -1,0 +1,604 @@
+{
+  "name": "Ganzkörper 7 Wochen – Kraft & Sprung",
+  "version": "1",
+  "language": "de",
+  "weeks": 7,
+  "rirTargets": {
+    "1": "3",
+    "2": "2-3",
+    "3": "2",
+    "4": "1-2",
+    "5": "1-2",
+    "6": "1-2",
+    "7": "3-4"
+  },
+  "deload": {
+    "weeks": [
+      7
+    ],
+    "setsDelta": -1,
+    "loadFactor": 0.8
+  },
+  "sessions": [
+    {
+      "key": "E1",
+      "name": "Einheit 1 – schwer",
+      "suggestedDay": "Schwere Einheit. Mindestens 48 h Abstand zu anderen intensiven Belastungen der Beine.",
+      "warmup": [
+        "World's Greatest Stretch 5× pro Seite",
+        "90/90 Hip Switches 8×",
+        "Glute Bridge 10×",
+        "Thoracic Extension (Bank/Rolle) 6–8×",
+        "Danach Aufwärmsätze der ersten Übung",
+        "Kein statisches Dehnen vor dem Training"
+      ],
+      "blocks": [
+        {
+          "type": "single",
+          "exercises": [
+            {
+              "id": "trap-bar-jump",
+              "name": "Trap Bar Jump",
+              "sets": 3,
+              "repsMin": 4,
+              "repsMax": 4,
+              "unit": "kg",
+              "restSec": 150,
+              "incrementKg": 0,
+              "cue": "Leicht, maximal explosiv, jede Wiederholung mit Reset.",
+              "garminCategory": 20,
+              "garminSubcategory": 2
+            }
+          ]
+        },
+        {
+          "type": "single",
+          "exercises": [
+            {
+              "id": "back-squat",
+              "name": "Back Squat",
+              "sets": 3,
+              "repsMin": 5,
+              "repsMax": 5,
+              "unit": "kg",
+              "restSec": 180,
+              "incrementKg": 2.5,
+              "garminCategory": 28,
+              "garminSubcategory": 6
+            }
+          ]
+        },
+        {
+          "type": "superset",
+          "exercises": [
+            {
+              "id": "pull-up",
+              "name": "Klimmzug",
+              "sets": 3,
+              "repsMin": 6,
+              "repsMax": 8,
+              "unit": "bodyweight",
+              "restSec": 60,
+              "incrementKg": 0,
+              "cue": "Optional mit Zusatzgewicht.",
+              "garminCategory": 21,
+              "garminSubcategory": 38
+            },
+            {
+              "id": "tibialis-raise",
+              "name": "Tibialis-Raise",
+              "sets": 3,
+              "repsMin": 12,
+              "repsMax": 12,
+              "unit": "bodyweight",
+              "restSec": 90,
+              "incrementKg": 0
+            }
+          ]
+        },
+        {
+          "type": "single",
+          "exercises": [
+            {
+              "id": "romanian-deadlift",
+              "name": "RDL (Rumänisches Kreuzheben)",
+              "sets": 3,
+              "repsMin": 6,
+              "repsMax": 8,
+              "unit": "kg",
+              "restSec": 150,
+              "incrementKg": 2.5,
+              "garminCategory": 8,
+              "garminSubcategory": 23,
+              "byWeek": {
+                "1": {
+                  "repsMin": 6,
+                  "repsMax": 6
+                },
+                "2": {
+                  "repsMin": 7,
+                  "repsMax": 7
+                },
+                "3": {
+                  "repsMin": 8,
+                  "repsMax": 8
+                },
+                "4": {
+                  "repsMin": 6,
+                  "repsMax": 6
+                },
+                "5": {
+                  "repsMin": 7,
+                  "repsMax": 7
+                },
+                "6": {
+                  "repsMin": 8,
+                  "repsMax": 8
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "superset",
+          "exercises": [
+            {
+              "id": "seated-shoulder-press",
+              "name": "Schulterdrücken sitzend mit Lehne",
+              "sets": 3,
+              "repsMin": 8,
+              "repsMax": 8,
+              "unit": "kg",
+              "restSec": 60,
+              "incrementKg": 1,
+              "garminCategory": 24,
+              "garminSubcategory": 17
+            },
+            {
+              "id": "copenhagen-plank",
+              "name": "Copenhagen Plank",
+              "sets": 2,
+              "durationSec": 20,
+              "unit": "s",
+              "perSide": true,
+              "restSec": 90,
+              "incrementKg": 0,
+              "garminCategory": 19,
+              "garminSubcategory": 66
+            }
+          ]
+        },
+        {
+          "type": "superset",
+          "exercises": [
+            {
+              "id": "standing-calf-raise",
+              "name": "Wadenheben stehend",
+              "sets": 3,
+              "repsMin": 8,
+              "repsMax": 12,
+              "unit": "kg",
+              "restSec": 60,
+              "incrementKg": 2.5,
+              "cue": "Schwer.",
+              "garminCategory": 1,
+              "garminSubcategory": 18,
+              "byWeek": {
+                "1": {
+                  "repsMin": 8,
+                  "repsMax": 8
+                },
+                "2": {
+                  "repsMin": 10,
+                  "repsMax": 10
+                },
+                "3": {
+                  "repsMin": 12,
+                  "repsMax": 12
+                },
+                "4": {
+                  "repsMin": 8,
+                  "repsMax": 8
+                },
+                "5": {
+                  "repsMin": 10,
+                  "repsMax": 10
+                },
+                "6": {
+                  "repsMin": 12,
+                  "repsMax": 12
+                }
+              }
+            },
+            {
+              "id": "hip-flexor-knee-raise",
+              "name": "Hüftbeuger-Knieheben (Band/Kabel)",
+              "sets": 2,
+              "repsMin": 8,
+              "repsMax": 8,
+              "unit": "bodyweight",
+              "perSide": true,
+              "restSec": 60,
+              "incrementKg": 0,
+              "cue": "Knie kontrolliert heben, Becken stabil.",
+              "garminCategory": 16,
+              "byWeek": {
+                "1": {
+                  "unit": "s",
+                  "sets": 3,
+                  "durationSec": 15,
+                  "cue": "Knie oben 15 s halten."
+                },
+                "2": {
+                  "unit": "s",
+                  "sets": 3,
+                  "durationSec": 15,
+                  "cue": "Knie oben 15 s halten."
+                },
+                "3": {
+                  "cue": "3 s absenken."
+                },
+                "4": {
+                  "cue": "3 s absenken, oben 2 s halten."
+                },
+                "5": {
+                  "cue": "4 s absenken, oben 2 s halten."
+                },
+                "6": {
+                  "cue": "4 s absenken, oben 2 s halten."
+                },
+                "7": {
+                  "cue": "Wie Woche 5 (4 s absenken, oben 2 s halten), ggf. leichter."
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "E2",
+      "name": "Einheit 2 – elastisch",
+      "suggestedDay": "Elastische Einheit, mit mindestens einem Tag Abstand zur schweren Einheit.",
+      "warmup": [
+        "World's Greatest Stretch 5× pro Seite",
+        "90/90 Hip Switches 8×",
+        "Glute Bridge 10×",
+        "Thoracic Extension (Bank/Rolle) 6–8×",
+        "Danach Aufwärmsätze der ersten Übung",
+        "Kein statisches Dehnen vor dem Training"
+      ],
+      "blocks": [
+        {
+          "type": "superset",
+          "exercises": [
+            {
+              "id": "pogo-jumps",
+              "name": "Pogo Jumps",
+              "sets": 2,
+              "repsMin": 6,
+              "repsMax": 10,
+              "unit": "bodyweight",
+              "restSec": 60,
+              "incrementKg": 0,
+              "garminCategory": 20,
+              "byWeek": {
+                "1": {
+                  "repsMin": 6,
+                  "repsMax": 6,
+                  "cue": "Intensität 70–80 %."
+                },
+                "2": {
+                  "repsMin": 6,
+                  "repsMax": 6,
+                  "cue": "Intensität 80 %."
+                },
+                "3": {
+                  "repsMin": 8,
+                  "repsMax": 8,
+                  "cue": "Intensität 90 %."
+                },
+                "4": {
+                  "repsMin": 8,
+                  "repsMax": 8
+                },
+                "5": {
+                  "repsMin": 10,
+                  "repsMax": 10
+                },
+                "6": {
+                  "repsMin": 10,
+                  "repsMax": 10
+                }
+              }
+            },
+            {
+              "id": "approach-jump",
+              "name": "Approach Jump",
+              "sets": 3,
+              "repsMin": 3,
+              "repsMax": 3,
+              "unit": "bodyweight",
+              "restSec": 120,
+              "incrementKg": 0,
+              "cue": "Maximal.",
+              "garminCategory": 20,
+              "garminSubcategory": 37,
+              "byWeek": {
+                "1": {
+                  "cue": "Intensität 80 %."
+                },
+                "2": {
+                  "cue": "Intensität 85 %."
+                },
+                "3": {
+                  "cue": "Intensität 90 %."
+                },
+                "4": {
+                  "cue": "Intensität 95 %."
+                },
+                "5": {
+                  "cue": "Maximal."
+                },
+                "6": {
+                  "cue": "Maximal."
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "single",
+          "exercises": [
+            {
+              "id": "med-ball-rotational-throw",
+              "name": "Med-Ball-Rotationswurf",
+              "sets": 3,
+              "repsMin": 4,
+              "repsMax": 4,
+              "unit": "kg",
+              "perSide": true,
+              "restSec": 90,
+              "incrementKg": 0,
+              "garminCategory": 20,
+              "garminSubcategory": 24
+            }
+          ]
+        },
+        {
+          "type": "single",
+          "exercises": [
+            {
+              "id": "bulgarian-split-squat",
+              "name": "Bulgarian Split Squat",
+              "sets": 3,
+              "repsMin": 6,
+              "repsMax": 8,
+              "unit": "kg",
+              "perSide": true,
+              "restSec": 120,
+              "incrementKg": 2.5,
+              "garminCategory": 17,
+              "garminSubcategory": 18,
+              "byWeek": {
+                "1": {
+                  "repsMin": 6,
+                  "repsMax": 6
+                },
+                "2": {
+                  "repsMin": 7,
+                  "repsMax": 7
+                },
+                "3": {
+                  "repsMin": 8,
+                  "repsMax": 8
+                },
+                "4": {
+                  "repsMin": 6,
+                  "repsMax": 6
+                },
+                "5": {
+                  "repsMin": 7,
+                  "repsMax": 7
+                },
+                "6": {
+                  "repsMin": 8,
+                  "repsMax": 8
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "single",
+          "exercises": [
+            {
+              "id": "hip-thrust",
+              "name": "Hip Thrust",
+              "sets": 3,
+              "repsMin": 8,
+              "repsMax": 8,
+              "unit": "kg",
+              "restSec": 120,
+              "incrementKg": 2.5,
+              "garminCategory": 10,
+              "garminSubcategory": 1
+            }
+          ]
+        },
+        {
+          "type": "single",
+          "exercises": [
+            {
+              "id": "leg-curl",
+              "name": "Leg Curl",
+              "sets": 3,
+              "repsMin": 6,
+              "repsMax": 8,
+              "unit": "bodyweight",
+              "restSec": 90,
+              "incrementKg": 0,
+              "cue": "Variante wählbar, auch im Wechsel testen.",
+              "variants": [
+                {
+                  "id": "slider",
+                  "name": "A: Slider"
+                },
+                {
+                  "id": "stability-ball",
+                  "name": "B: Stability Ball"
+                }
+              ],
+              "garminCategory": 15,
+              "garminSubcategory": 6,
+              "byWeek": {
+                "1": {
+                  "repsMin": 6,
+                  "repsMax": 6
+                },
+                "2": {
+                  "repsMin": 7,
+                  "repsMax": 7
+                },
+                "3": {
+                  "repsMin": 8,
+                  "repsMax": 8
+                },
+                "4": {
+                  "repsMin": 8,
+                  "repsMax": 8
+                },
+                "5": {
+                  "repsMin": 8,
+                  "repsMax": 8
+                },
+                "6": {
+                  "repsMin": 8,
+                  "repsMax": 10
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "superset",
+          "exercises": [
+            {
+              "id": "seated-cable-row",
+              "name": "Rudern Kabel sitzend",
+              "sets": 3,
+              "repsMin": 8,
+              "repsMax": 10,
+              "unit": "kg",
+              "restSec": 60,
+              "incrementKg": 2.5,
+              "garminCategory": 23,
+              "garminSubcategory": 18
+            },
+            {
+              "id": "landmine-press",
+              "name": "Landmine-Drücken",
+              "sets": 2,
+              "repsMin": 8,
+              "repsMax": 8,
+              "unit": "kg",
+              "perSide": true,
+              "restSec": 90,
+              "incrementKg": 2.5,
+              "garminCategory": 24
+            }
+          ]
+        },
+        {
+          "type": "superset",
+          "exercises": [
+            {
+              "id": "pallof-press",
+              "name": "Pallof Press",
+              "sets": 2,
+              "repsMin": 10,
+              "repsMax": 10,
+              "unit": "kg",
+              "perSide": true,
+              "restSec": 45,
+              "incrementKg": 1,
+              "garminCategory": 5
+            },
+            {
+              "id": "external-rotation",
+              "name": "Außenrotation (Band/Kabel)",
+              "sets": 2,
+              "repsMin": 12,
+              "repsMax": 12,
+              "unit": "kg",
+              "perSide": true,
+              "restSec": 60,
+              "incrementKg": 1,
+              "garminCategory": 25,
+              "garminSubcategory": 4
+            }
+          ]
+        },
+        {
+          "type": "superset",
+          "exercises": [
+            {
+              "id": "hip-flexor-knee-raise",
+              "name": "Hüftbeuger-Knieheben (Band/Kabel)",
+              "sets": 2,
+              "repsMin": 8,
+              "repsMax": 8,
+              "unit": "bodyweight",
+              "perSide": true,
+              "restSec": 60,
+              "incrementKg": 0,
+              "cue": "Knie kontrolliert heben, Becken stabil.",
+              "garminCategory": 16,
+              "byWeek": {
+                "1": {
+                  "unit": "s",
+                  "sets": 3,
+                  "durationSec": 15,
+                  "cue": "Knie oben 15 s halten."
+                },
+                "2": {
+                  "unit": "s",
+                  "sets": 3,
+                  "durationSec": 15,
+                  "cue": "Knie oben 15 s halten."
+                },
+                "3": {
+                  "cue": "3 s absenken."
+                },
+                "4": {
+                  "cue": "3 s absenken, oben 2 s halten."
+                },
+                "5": {
+                  "cue": "4 s absenken, oben 2 s halten."
+                },
+                "6": {
+                  "cue": "4 s absenken, oben 2 s halten."
+                },
+                "7": {
+                  "cue": "Wie Woche 5 (4 s absenken, oben 2 s halten), ggf. leichter."
+                }
+              }
+            },
+            {
+              "id": "seated-calf-raise",
+              "name": "Wadenheben sitzend",
+              "sets": 2,
+              "repsMin": 12,
+              "repsMax": 12,
+              "unit": "kg",
+              "restSec": 60,
+              "incrementKg": 2.5,
+              "garminCategory": 1,
+              "garminSubcategory": 6
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

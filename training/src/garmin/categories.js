@@ -1,0 +1,43 @@
+// Hauptkategorien für Kraftübungen (exercise_category) aus dem Garmin-FIT-Profil (SDK 21.221).
+// Für den Agent-Prompt, damit die KI garminCategory nicht raten muss. Unterkategorien gibt es
+// tausende, die stehen bewusst nicht hier.
+
+export const GARMIN_CATEGORIES = Object.freeze([
+  [0, 'bench_press'],
+  [1, 'calf_raise'],
+  [2, 'cardio'],
+  [3, 'carry'],
+  [4, 'chop'],
+  [5, 'core'],
+  [6, 'crunch'],
+  [7, 'curl'],
+  [8, 'deadlift'],
+  [9, 'flye'],
+  [10, 'hip_raise'],
+  [11, 'hip_stability'],
+  [12, 'hip_swing'],
+  [13, 'hyperextension'],
+  [14, 'lateral_raise'],
+  [15, 'leg_curl'],
+  [16, 'leg_raise'],
+  [17, 'lunge'],
+  [18, 'olympic_lift'],
+  [19, 'plank'],
+  [20, 'plyo'],
+  [21, 'pull_up'],
+  [22, 'push_up'],
+  [23, 'row'],
+  [24, 'shoulder_press'],
+  [25, 'shoulder_stability'],
+  [26, 'shrug'],
+  [27, 'sit_up'],
+  [28, 'squat'],
+  [29, 'total_body'],
+  [30, 'triceps_extension'],
+  [31, 'warm_up'],
+]);
+
+/** Kompakte Liste für den Prompt: "0 bench_press, 1 calf_raise, …". */
+export function categoryListText() {
+  return GARMIN_CATEGORIES.map(([n, name]) => `${n} ${name}`).join(', ');
+}
