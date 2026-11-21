@@ -1,6 +1,7 @@
-// Erzeugt Precache-Liste und Version (Inhalts-Hash) in training/sw.js.
-// Aufruf: npm run sw   (nach jeder Änderung an Dateien unter training/)
-// Mit --check wird nur geprüft (für Tests), ob sw.js aktuell ist.
+// Erzeugt training/src/version.js (App-Version aus package.json) sowie Precache-Liste und
+// Cache-Version (Inhalts-Hash) in training/sw.js.
+// Aufruf: npm run sw   (nach jeder Änderung an Dateien unter training/ und nach jedem Versionssprung)
+// Mit --check wird nur geprüft (für Tests), ob beide Dateien aktuell sind.
 
 import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
@@ -10,6 +11,14 @@ import { fileURLToPath } from 'node:url';
 const ROOT = fileURLToPath(new URL('../training/', import.meta.url));
 const SW = join(ROOT, 'sw.js');
 const SKIP = new Set(['sw.js']);
+const VERSION_FILE = join(ROOT, 'src', 'version.js');
+const PKG = fileURLToPath(new URL('../package.json', import.meta.url));
+
+/** Inhalt von training/src/version.js für die Version in package.json. */
+export function expectedVersionFile() {
+  const { version } = JSON.parse(readFileSync(PKG, 'utf8'));
+  return `// Erzeugt von \`npm run sw\` aus package.json. Nicht von Hand pflegen.\nexport const APP_VERSION = '${version}';\n`;
+}
 
 function walk(dir) {
   return readdirSync(dir).sort().flatMap((name) => {
@@ -39,9 +48,20 @@ export function expectedSw() {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const check = process.argv.includes('--check');
+  const versionSrc = expectedVersionFile();
+  let versionCurrent = '';
+  try { versionCurrent = readFileSync(VERSION_FILE, 'utf8'); } catch { /* fehlt noch */ }
+  if (versionCurrent !== versionSrc) {
+    if (check) {
+      console.error('training/src/version.js ist nicht aktuell. Bitte `npm run sw` ausführen.');
+      process.exit(1);
+    }
+    writeFileSync(VERSION_FILE, versionSrc);
+  }
   const { src, version, files } = expectedSw();
   const current = readFileSync(SW, 'utf8');
-  if (process.argv.includes('--check')) {
+  if (check) {
     if (current !== src) {
       console.error('training/sw.js ist nicht aktuell. Bitte `npm run sw` ausführen.');
       process.exit(1);

@@ -52,6 +52,7 @@ Veröffentlicht wird mit `develop` → `main` als Merge-Commit (README: GitHub P
 - In der App gibt es keinen „Beispielplan laden“ mehr.
 - Merge nach `main` vor Runde 3 (Betreiber, 2026-11-15, ersetzt „erst nach Runde 3“): erst im Studio testen.
 - Repo neu angelegt (Legal N6, Betreiber, 2026-11-21): Die alte Historie enthielt persönliche Angaben des Betreibers. Das alte Repo wurde gelöscht (Sicherung als `git bundle` beim Betreiber), das neue beginnt mit einem Commit mit dem Stand nach Runde 3. Commit-IDs in `reviews/` und hier (z. B. `7c00163`, `62ce59a`) beziehen sich auf die alte Historie und sind im neuen Repo nicht auffindbar.
+- Versionen (Betreiber, 2026-11-21): MAJOR.MINOR.PATCH in `package.json`, Anzeige auf der Info-Seite, Tag `vX.Y.Z` bei jedem App-Merge nach `main` (manuell, der Workflow bleibt nur lesend), Major = `SCHEMA_VERSION`. Regeln in `CLAUDE.md`, Verlauf in `CHANGELOG.md`.
 - GitHub: Ruleset „Schutz main und develop“ (kein Löschen, kein Force-Push), SHA-Pinning für Actions erzwungen, erlaubt bleiben alle Actions, keine PR-Pflicht.
 
 ## Selbst getroffene Entscheidungen (bitte prüfen)

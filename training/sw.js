@@ -5,7 +5,7 @@
 // Integrität: Jede Datei wird gegen ihren SHA-256 geprüft, beim Installieren und bei jeder Auslieferung aus dem Cache.
 // So kann eine andere Seite derselben Origin (z. B. ein weiteres GitHub-Pages-Projekt) den Cache nicht unbemerkt verändern.
 
-const VERSION = 'c2fac6d5b828';
+const VERSION = '2a26e7506148';
 const PRECACHE = [
   './',
   './css/app.css',
@@ -38,6 +38,7 @@ const PRECACHE = [
   './src/model/weeks.js',
   './src/sound.js',
   './src/storage.js',
+  './src/version.js',
   './src/views/history.js',
   './src/views/info.js',
   './src/views/live.js',
@@ -76,8 +77,9 @@ const HASHES = {
   './src/model/weeks.js': 'd05245a09b68fecd4bc81b07da718bcb156c0be54f295f41dbe26006b54e7520',
   './src/sound.js': '02cf03e9826a090dae8162f57f34488d26a401a134a2e8598ba38d03867c447d',
   './src/storage.js': '2a6c810c1c84aa4bbc527b6025151d80cecc978ba6ecd4ad78ae3bf26beb2e63',
+  './src/version.js': '5c30315b6f9ab1df4c1933d2a3917de8f60a5b1e32d4b80bdcbd809d099ecf17',
   './src/views/history.js': 'c0a77f80ea17f01151d45a9e19faf7f5413ab4cfe467721d1c6b73c67836bf8c',
-  './src/views/info.js': 'def7017e534460b730abc20a78eb18e1bd00638980441faf619c3a2024de982d',
+  './src/views/info.js': '93376de64bf4622330a76d0cd9e1116f29a97b32115492136dd2a278b00e6ebe',
   './src/views/live.js': '944705bd80229f03765f13f2df3c8fa92dec5aa4e56871c5919d3280c8d71803',
   './src/views/plan.js': '58c0670629578c0b3fa4e889385b1255a65100fe04a9c958cbf84ce457437a3f',
   './src/wakelock.js': '9a1eb64fd0643be7b6a0558265549f7a8aac7a14920303e9dbd75caca64380aa',
