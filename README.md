@@ -99,7 +99,7 @@ training/                 die App (wird so ausgeliefert)
   src/garmin/             FIT-Encoder und Garmin-Export
   src/legal.js            Betreiberangaben (nur hier pflegen)
 tests/                    Unit-Tests, tests/e2e/ Browser-Prüfungen, tests/fixtures/ Beispielplan (nur für Tests, wird nicht ausgeliefert)
-docs/                     Spezifikation, Arbeitsstand, Prototyp (nur visuelle Vorlage)
+docs/                     Spezifikation, Arbeitsstand, Wunschliste, Prototyp (nur visuelle Vorlage)
 ```
 
 ## Sicherheit beim Hosting

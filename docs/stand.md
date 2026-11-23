@@ -22,7 +22,7 @@ Veröffentlicht wird mit `develop` → `main` als Merge-Commit (README: GitHub P
 
 ## Offen
 
-### In Arbeit: Version 2.0 (Stand 2026-11-23)
+### Version 2.0 (live seit 2026-11-23, Tag `v2.0.0`)
 
 Vorhaben: Hauptübungen, RIR, RPE und Notiz pro Training, Coach-Export, eine Trainingsdatei pro Durchgang, Archiv. Abgestimmter Entwurf: `docs/entwurf-2.0.md`. Begriffe: `docs/begriffe.md`.
 
@@ -43,7 +43,7 @@ Selbst getroffene Entscheidungen in Schritt 5: Das Archiv zeigt den Plan ab der 
 
 Selbst getroffene Entscheidungen in Schritt 4: Ungesicherte ältere Trainingsdateien werden nicht nach dem ersten Angebot gelöscht, sondern bei jedem Start wieder angeboten, bis sie gesichert oder ausdrücklich verworfen sind (sonst ginge Ungesichertes verloren). Eine eben aus einer Datei geöffnete Trainingsdatei gilt als gesichert. `startNewCycle` bleibt im Modell (alte Tests), die App nutzt es nicht mehr. Alte Dateien mit mehreren Durchgängen zeigen weiter „Durchgang N“.
 
-**Übergabe ins öffentliche Repo (2026-11-23):** erledigt. Stand per `git merge --squash` als ein Commit auf `feature/version-2` ab `develop`, eigene Commit-Nachricht ohne Zwischen-Commits und Session-Links, Hinweis auf das private Repo entfernt (Legal N6).
+**Übergabe ins öffentliche Repo (2026-11-23):** erledigt. Stand per `git merge --squash` als ein Commit auf `feature/version-2` ab `develop`, eigene Commit-Nachricht ohne Zwischen-Commits und Session-Links, Hinweis auf das private Repo entfernt (Legal N6). Squash-Merge nach `develop`, Merge nach `main`, Tag `v2.0.0`, ausgeliefert.
 
 **Nächster Schritt:** Test am iPhone mit der Checkliste aus `reviews/ios-ux-r4.md` (besonders Punkt 4: RPE-Regler).
 
@@ -58,16 +58,15 @@ Browser-Prüfungen in der Cloud-Sitzung: Playwright ist vorinstalliert unter `/o
 
 ### Nächste Schritte
 
-1. Rückmeldungen des Betreibers aus dem Test im Studio umsetzen. Erste Runde (nach der ersten Testfahrt): Warm-up bleibt offen, keine Pause nach dem letzten Satz, Liste scrollt zum aktuellen Satz, Auswahl im Verlauf öffnet sich unter iOS nicht neu, nur noch ein Abschluss-Knopf, Umschalter Liste/Fokus in der Pausenleiste. Reviews dazu: `reviews/testfahrt-*.md` (keine kritischen oder hohen Findings; mittlere behoben). Beim nächsten Training prüft der Betreiber: ob beim Hüftbeuger „Halten starten“ da ist, die iPhone-Checkliste in `reviews/testfahrt-ios-ux.md`. Zurückgestellt: Klimmzug unterstützt/frei als Variante im Plan (Garmin `bandAssistedPullUp`, ohne Gewicht).
+1. Rückmeldungen des Betreibers aus dem Test im Studio umsetzen. Erste Runde (nach der ersten Testfahrt): Warm-up bleibt offen, keine Pause nach dem letzten Satz, Liste scrollt zum aktuellen Satz, Auswahl im Verlauf öffnet sich unter iOS nicht neu, nur noch ein Abschluss-Knopf, Umschalter Liste/Fokus in der Pausenleiste. Reviews dazu: `reviews/testfahrt-*.md` (keine kritischen oder hohen Findings; mittlere behoben). Beim nächsten Training prüft der Betreiber: ob beim Hüftbeuger „Halten starten“ da ist, die iPhone-Checkliste in `reviews/testfahrt-ios-ux.md`. Zurückgestellt (jetzt in `docs/wishlist.md`): Klimmzug unterstützt/frei als Variante im Plan.
 2. Offene Punkte aus Runde 3 (in `reviews/umsetzung-r3.md` als „später“ oder „Entscheidung Betreiber“ markiert).
 
-### Offen beim Betreiber
+### Wunschliste
 
-- **Querformat im Fokus-Modus:** Dort muss man weiter scrollen, um „Satz fertig“ und den Timer zu sehen. Ein zweispaltiges Layout ist möglich, bisher aber nicht beauftragt (die Spezifikation verlangt Hochformat).
+Feature-Ideen und zurückgestellte Review-Punkte stehen gesammelt in `docs/wishlist.md` (u. a. Querformat im Fokus-Modus, Klimmzug mit Unterstützung, alte Trainingsstände löschbar).
 
 ### Später
 
-- Alte Trainingsstände im Menü löschbar machen (Security N9).
 - Auf dem echten iPhone prüfen (Schritt 9): Signalton nach einem Tap, nach Rückkehr aus dem Hintergrund und mit Stummschalter; Kopieren des Prompts mit Ergebnissen.
 - Nach dem Deploy (https) auf dem iPhone prüfen: Teilen-Menü in Safari und Chrome für `.training.json` (Ersetzen statt „(1)“) und `.fit`. Erledigt laut Betreiber: Halte-Countdown mit Seitenwechsel, Gewichts-Buttons mit feuchten Fingern, Garmin-Export und Import in Connect.
 - Checkliste für das echte iPhone: `reviews/ios-ux-r2.md`, Abschnitt „Checkliste“.
