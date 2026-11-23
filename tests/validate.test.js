@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseImportText, validatePlan, validateTrainingFile, ValidationError, LIMITS } from '../training/src/model/validate.js';
+import { parseImportText, validatePlan, validateTrainingFile, ValidationError, LIMITS, SCHEMA_VERSION } from '../training/src/model/validate.js';
 import { createTrainingFile, serialize } from '../training/src/model/training-file.js';
 import { planText, planRaw, session, block } from './helpers.js';
 
@@ -106,7 +106,7 @@ test('Trainingsdatei: Rundreise erstellen → serialisieren → importieren', ()
 
 test('Trainingsdatei: neuere schemaVersion und fehlerhafte Sessions', () => {
   const file = createTrainingFile(validatePlan(planRaw()));
-  assert.match(errorsOf(() => validateTrainingFile({ ...file, schemaVersion: 2 }))[0], /neueren App-Version/);
+  assert.match(errorsOf(() => validateTrainingFile({ ...file, schemaVersion: SCHEMA_VERSION + 1 }))[0], /neueren App-Version/);
 
   const bad = structuredClone(file);
   bad.sessions = [

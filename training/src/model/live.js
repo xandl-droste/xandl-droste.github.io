@@ -6,21 +6,21 @@ import { findPlanSession } from './plan.js';
 import { cycleOf } from './weeks.js';
 import { suggestSets, applyIncrease, lastPerformance } from './progression.js';
 import { newId } from './id.js';
+import { performanceSessions } from './carry-over.js';
+import { LIMITS } from './validate.js';
+import { localDate } from '../format.js';
+
+export { localDate };
 
 export const LIVE_VERSION = 1;
-const MAX_SETS = 30;
-const MAX_NOTE = 2000;
+const MAX_SETS = LIMITS.maxLoggedSets;
+const MAX_NOTE = LIMITS.maxNote;
 /** Schrittweiten der Gewichts-Stepper: für alle Übungen gleich (außen groß, innen klein). */
 export const KG_STEPS = Object.freeze([2.5, 0.5]);
 
 const clone = (v) => structuredClone(v);
 const isDeloadWeek = (plan, week) => Boolean(plan.deload?.weeks.includes(week));
 
-/** Lokales Datum JJJJ-MM-TT. */
-export function localDate(d) {
-  const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
 
 /**
  * Stellt ein gespeichertes laufendes Training wieder her. Die Anzeige-Daten (items) werden aus dem Plan neu
@@ -42,6 +42,7 @@ export function restoreLive(file, stored, checkSession) {
   const blocks = session.blocks.map((b, k) => ({
     ...prescriptionOf(b.plannedSets != null ? b : fresh.session.blocks[k]),
     exerciseId: b.exerciseId, variantId: b.variantId, sets: b.sets, note: b.note, skipped: Boolean(b.skipped),
+    ...(b.rirLast != null && items[k]?.main ? { rirLast: b.rirLast } : {}),
   }));
   const r = stored.rest;
   const rest = r && Number.isFinite(r.endsAt) && Number.isFinite(r.totalSec) && Number.isInteger(r.afterItem) && r.afterItem >= 0 && r.afterItem < items.length
@@ -77,14 +78,16 @@ export function startLive(file, sessionKey, { now = new Date(), id = newId(), we
   const ps = findPlanSession(file.plan, sessionKey);
   if (!ps) throw new Error(`Einheit ${sessionKey} nicht im Plan`);
   const w = week ?? file.progress.currentWeek;
+  // Vorbelegung und Progression: eigene Trainings, davor die Startwerte aus dem Vorgänger.
+  const history = performanceSessions(file);
   const items = [];
   const blocks = [];
   ps.blocks.forEach((block, blockIndex) => {
     block.exercises.forEach((ex, xi) => {
-      const sug = suggestSets(file.plan, ex, w, file.sessions);
+      const sug = suggestSets(file.plan, ex, w, history);
       const p = sug.prescription;
       const variants = (ex.variants ?? []).map((v) => ({ id: v.id, name: v.name, cue: v.cue ?? '' }));
-      const lastAny = lastPerformance(file.sessions, ex.id);
+      const lastAny = lastPerformance(history, ex.id);
       const lastVariant = lastAny?.block.variantId;
       items.push({
         blockIndex,
@@ -92,6 +95,7 @@ export function startLive(file, sessionKey, { now = new Date(), id = newId(), we
         slot: block.type === 'superset' ? (xi === 0 ? 'a' : 'b') : null,
         exerciseId: ex.id,
         name: ex.name,
+        main: Boolean(ex.main),
         unit: p.unit,
         plannedSets: p.sets,
         repsMin: p.repsMin,
@@ -176,6 +180,8 @@ export function toggleSet(live, i, s, now = new Date()) {
   set.done = !set.done;
   if (set.done) set.doneAt = now.toISOString();
   else delete set.doneAt;
+  // Ein wieder geöffneter Satz macht den RIR-Wert ungültig: Er gehört zum letzten Satz der Übung.
+  if (!set.done) delete next.session.blocks[i].rirLast;
   // Ein erledigter Satz holt seinen Block aus „Später“ zurück.
   if (set.done && next.deferred?.length) next.deferred = next.deferred.filter((b) => b !== next.items[i].blockIndex);
   const rest = next.items[i].restSec;
@@ -227,6 +233,8 @@ export function addSet(live, i) {
   if (sets.length >= MAX_SETS) return live;
   const last = sets[sets.length - 1] ?? { kg: null, reps: next.items[i].repsMin, sec: next.items[i].durationSec };
   sets.push({ kg: last.kg, reps: last.reps, sec: last.sec, done: false });
+  // Ein neuer letzter Satz: Der bisherige RIR-Wert gehört nicht mehr zum letzten Satz.
+  delete next.session.blocks[i].rirLast;
   return next;
 }
 
@@ -319,6 +327,29 @@ export function holdPhase({ startedAt, sec, perSide = false }, now = Date.now())
   return { phase: 'done', side: null, index: phases.length, remaining: 0, phaseStartedAt: endsAt, endsAt, finished: true };
 }
 
+// ---------- RIR nach dem letzten Satz ----------
+
+/**
+ * Ist bei Übung i die RIR-Abfrage fällig? Nur bei Hauptübungen, die nicht übersprungen sind und bei denen alle
+ * Sätze erledigt sind (also nach dem letzten Satz).
+ */
+export function rirDue(live, i) {
+  const item = live.items[i];
+  const block = live.session.blocks[i];
+  if (!item?.main || !block || block.skipped || !block.sets.length) return false;
+  return block.sets.every((s) => s.done);
+}
+
+/** RIR-Wert der Übung i setzen (0 bis 4, 4 = „4+“) oder mit null entfernen. Nur wenn die Abfrage fällig ist. */
+export function setRir(live, i, value) {
+  if (value !== null && !(Number.isInteger(value) && value >= 0 && value <= LIMITS.maxRir)) return live;
+  if (value !== null && !rirDue(live, i)) return live;
+  const next = clone(live);
+  if (value === null) delete next.session.blocks[i].rirLast;
+  else next.session.blocks[i].rirLast = value;
+  return next;
+}
+
 export function setNote(live, i, note) {
   const next = clone(live);
   next.session.blocks[i].note = String(note ?? '').slice(0, MAX_NOTE);
@@ -376,13 +407,37 @@ export function hasAnyDone(live) {
   return live.session.blocks.some((b) => b.sets.some((s) => s.done));
 }
 
-/** Fertige Session für die Historie (Format der .training.json). */
-export function finishLive(live, now = new Date()) {
+/** RPE eines Trainings prüfen: ganze Zahl 0 bis 10, sonst null. */
+export function cleanRpe(v) {
+  return Number.isInteger(v) && v >= 0 && v <= LIMITS.maxRpe ? v : null;
+}
+
+/**
+ * Fertige Session für die Historie (Format der .training.json). Mit Namen der Übung und Variante, damit das Training
+ * auch ohne den Plan lesbar bleibt.
+ * @param {{rpe?: number|null, note?: string}} [extra] Angaben aus dem Abschluss-Dialog (beide optional)
+ */
+export function finishLive(live, now = new Date(), { rpe = null, note = '' } = {}) {
   const s = clone(live.session);
   s.endedAt = now.toISOString();
-  s.blocks = s.blocks.map((b) => {
-    const out = { exerciseId: b.exerciseId, variantId: b.variantId, sets: b.sets, note: b.note.trim(), ...prescriptionOf(b) };
+  const r = cleanRpe(rpe);
+  if (r != null) s.rpe = r;
+  else delete s.rpe;
+  const text = String(note ?? '').slice(0, MAX_NOTE).trim();
+  if (text) s.note = text;
+  else delete s.note;
+  s.blocks = s.blocks.map((b, k) => {
+    const item = live.items[k];
+    const out = { exerciseId: b.exerciseId };
+    if (item?.name) out.name = item.name;
+    out.variantId = b.variantId;
+    const vn = item?.variants.find((v) => v.id === b.variantId)?.name;
+    if (vn) out.variantName = vn;
+    out.sets = b.sets;
+    out.note = b.note.trim();
+    Object.assign(out, prescriptionOf(b));
     if (b.skipped) out.skipped = true;
+    else if (b.rirLast != null && item?.main && b.sets.length && b.sets.every((x) => x.done)) out.rirLast = b.rirLast;
     return out;
   });
   return s;

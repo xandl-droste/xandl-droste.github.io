@@ -2,7 +2,7 @@
   "name": "training-pwa",
   "private": true,
   "license": "MIT",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "description": "Lokale Offline-PWA zum Abarbeiten und Protokollieren eines Krafttrainingsplans",
   "type": "module",
   "engines": {
@@ -11,6 +11,6 @@
   "scripts": {
     "test": "node --test",
     "sw": "node scripts/update-sw.mjs",
-    "e2e": "node tests/e2e/training.e2e.mjs && node tests/e2e/import.e2e.mjs && node tests/e2e/offline.e2e.mjs && node tests/e2e/info.e2e.mjs && node tests/e2e/insecure.e2e.mjs && node tests/e2e/speichern.e2e.mjs"
+    "e2e": "node tests/e2e/training.e2e.mjs && node tests/e2e/import.e2e.mjs && node tests/e2e/offline.e2e.mjs && node tests/e2e/info.e2e.mjs && node tests/e2e/insecure.e2e.mjs && node tests/e2e/speichern.e2e.mjs && node tests/e2e/rir.e2e.mjs && node tests/e2e/durchgang.e2e.mjs && node tests/e2e/archiv.e2e.mjs"
   }
 }

@@ -4,6 +4,7 @@
 import { SCHEMA_VERSION, LIMITS } from './validate.js';
 import { allExerciseIds, countExercises } from './plan.js';
 import { newId } from './id.js';
+import { localDate } from '../format.js';
 
 const clone = (v) => structuredClone(v);
 const iso = (d) => new Date(d).toISOString();
@@ -18,13 +19,22 @@ export function themeFor(settings, prefersLight) {
   return prefersLight ? 'light' : 'dark';
 }
 
-/** Legt aus einem Plan eine neue Trainingsdatei mit leerer Historie an. */
-export function createTrainingFile(plan, { now = new Date(), fileId = newId(), settings } = {}) {
-  return {
+/**
+ * Legt aus einem Plan eine neue Trainingsdatei mit leerer Historie an.
+ * previous und carryOver nur für einen Nachfolger (siehe carry-over.js).
+ */
+export function createTrainingFile(plan, { now = new Date(), fileId = newId(), settings, previous, carryOver } = {}) {
+  const file = {
     schemaVersion: SCHEMA_VERSION,
     fileId,
     revision: 0,
     updatedAt: iso(now),
+    createdAt: iso(now),
+  };
+  if (previous) file.previous = clone(previous);
+  if (carryOver?.length) file.carryOver = clone(carryOver);
+  return {
+    ...file,
     plan: clone(plan),
     settings: { theme: 'dark', view: 'list', ...definedOnly(settings) },
     progress: { currentWeek: 1, status: 'active' },
@@ -50,11 +60,39 @@ export function replacePlan(file, plan, now = new Date()) {
       ...file,
       plan: clone(plan),
       progress: { ...file.progress, currentWeek: Math.min(file.progress.currentWeek, plan.weeks), status: 'active' },
-      sessions: clone(file.sessions),
+      // Namen aus dem bisherigen Plan festhalten, bevor er ersetzt wird: Erledigte Trainings bleiben so lesbar.
+      sessions: withBlockNames(file.sessions, file.plan),
     },
     now,
   );
   return { file: next, unmatchedExerciseIds: [...unmatched].sort() };
+}
+
+/**
+ * Trägt in Blöcken ohne Namen den Übungs- und Variantennamen aus dem Plan ein (ältere Trainings).
+ * Vorhandene Namen bleiben. Gibt neue Objekte zurück.
+ */
+export function withBlockNames(sessions, plan) {
+  const names = new Map();
+  const variants = new Map();
+  for (const ps of plan.sessions) {
+    for (const block of ps.blocks) {
+      for (const ex of block.exercises) {
+        if (!names.has(ex.id)) names.set(ex.id, ex.name);
+        for (const v of ex.variants ?? []) variants.set(`${ex.id}/${v.id}`, v.name);
+      }
+    }
+  }
+  return sessions.map((s) => ({
+    ...clone(s),
+    blocks: s.blocks.map((b) => {
+      const out = clone(b);
+      if (out.name == null && names.has(b.exerciseId)) out.name = names.get(b.exerciseId);
+      const vn = b.variantId ? variants.get(`${b.exerciseId}/${b.variantId}`) : null;
+      if (out.variantName == null && vn) out.variantName = vn;
+      return out;
+    }),
+  }));
 }
 
 const byStart = (a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt) || a.id.localeCompare(b.id);
@@ -125,8 +163,13 @@ export function summarize({ plan, sessions = null }) {
   };
 }
 
-/** Sicherer Dateiname aus dem Plannamen: <planname>.training.json */
-export function trainingFileName(planName) {
+/**
+ * Sicherer Dateiname aus dem Plannamen: <planname>-<JJJJ-MM-TT>-<id4>.training.json mit dem Tag der Anlage (createdAt)
+ * und den ersten 4 Zeichen der fileId. Die 4 Zeichen machen den Namen eindeutig (Vorgänger und Nachfolger vom selben
+ * Tag, zwei Dateien aus 1.x mit demselben Plan), damit „Ersetzen“ nie die Sicherung einer anderen Trainingsdatei trifft.
+ * Ohne createdAt (Dateien aus 1.x) entfällt das Datum, ohne fileId die 4 Zeichen.
+ */
+export function trainingFileName(planName, createdAt = null, fileId = null) {
   const base = String(planName ?? '')
     .toLowerCase()
     .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
@@ -135,7 +178,14 @@ export function trainingFileName(planName) {
     .replace(/^-+|-+$/g, '')
     .slice(0, 60)
     .replace(/-+$/g, '');
-  return `${base || 'training'}.training.json`;
+  const day = createdAt && Number.isFinite(Date.parse(createdAt)) ? `-${localDate(createdAt)}` : '';
+  const id = typeof fileId === 'string' && /^[0-9a-f]{4}/i.test(fileId) ? `-${fileId.slice(0, 4).toLowerCase()}` : '';
+  return `${base || 'training'}${day}${id}.training.json`;
+}
+
+/** Dateiname einer Trainingsdatei. */
+export function fileNameOf(file) {
+  return trainingFileName(file.plan.name, file.createdAt ?? null, file.fileId ?? null);
 }
 
 /** Stabile JSON-Ausgabe für den Export. */

@@ -18,7 +18,8 @@ Adresse: `https://xandl-droste.github.io/training/`
 
 iOS kann Browserdaten löschen (z. B. bei Speichermangel oder wenn eine Web-App lange nicht benutzt wurde). Deshalb:
 
-- Nach jedem Training **„Als Datei sichern“** tippen und im Teilen-Menü **„In Dateien sichern“** wählen. Bei der Rückfrage **„Ersetzen“** wählen, dann gibt es immer genau eine aktuelle Datei pro Plan (`<planname>.training.json`).
+- Nach jedem Training **„Als Datei sichern“** tippen und im Teilen-Menü **„In Dateien sichern“** wählen. Bei der Rückfrage **„Ersetzen“** wählen, dann gibt es immer genau eine aktuelle Datei pro Durchgang (`<planname>-<JJJJ-MM-TT>.training.json`, Datum der Anlage).
+- Ab Version 2.0 liegt pro Durchgang eine eigene Trainingsdatei vor. Ein neuer Durchgang („Plan erneut starten“ oder ein neuer Plan als „Nachfolger“) bekommt eine neue Datei mit Verweis auf die bisherige; die bisherige bleibt in Dateien. Vor dem Wechsel sichert die App den bisherigen Stand, im Browser liegt danach nur die aktive Trainingsdatei.
 - Die App markiert Trainings, die noch nicht gesichert sind, und erinnert beim Start. Auch nach 7 Tagen ohne Export.
 - Es gibt keine automatische Synchronisation. Gesichert ist nur, was du exportiert hast.
 
@@ -27,7 +28,13 @@ iOS kann Browserdaten löschen (z. B. bei Speichermangel oder wenn eine Web-App 
 ## Neuer Plan
 
 - **Mit KI:** „Neuen Plan erstellen“ (bzw. Plan → „Plan mit KI erstellen oder anpassen“) zeigt einen fertigen Prompt. In einen KI-Agenten kopieren, Fragen beantworten, die erzeugte `plan.json` speichern und in der App öffnen.
-- **Neuer Plan für bestehende Historie:** Beim Öffnen einer `plan.json` „Historie behalten“ wählen. Die Zuordnung läuft über die Übungs-IDs.
+- **Neuer Plan bei vorhandener Trainingsdatei:** Beim Öffnen einer `plan.json` wählen: „Anpassen“ (gleiche Trainingsdatei, gleiche Woche), „Nachfolger“ (neue Trainingsdatei ab Woche 1, die letzten Gewichte werden übernommen) oder „Ganz neu“. Die Zuordnung läuft über die Übungs-IDs.
+- **Hauptübungen:** Pläne können Übungen mit `"main": true` markieren. Nach deren letztem Satz fragt die App nach dem RIR (Wiederholungen im Tank). Das Feld setzt der KI-Agent, die App ändert den Plan nie.
+
+## Export für Coach und Archiv
+
+- **Plan → „Export für Coach“:** schlanker Text mit Plan und allen Trainings der aktiven Trainingsdatei (inkl. RIR, RPE und Notizen) für einen KI-Coach, als `.md`-Datei teilen oder kopieren. Die Daten gehen an den Anbieter des KI-Dienstes.
+- **Archiv:** eine ältere Trainingsdatei oder Plandatei nur ansehen (Trainings, Graphen, Plan), ohne den aktiven Plan zu ändern. Auch dort gibt es Export für Coach und Garmin-Export. Die Datei wird nicht im Browser gespeichert.
 - Ungültige Dateien werden nie halb übernommen. Die Fehlermeldung nennt die Stelle, z. B. `plan.sessions[1].blocks[2].exercises[0]: repsMax fehlt`.
 
 ## Export für Garmin Connect (optional)
@@ -87,7 +94,7 @@ training/                 die App (wird so ausgeliefert)
   sw.js                   Service Worker (generiert: npm run sw)
   manifest.webmanifest    PWA-Manifest
   css/app.css             Stile (Hell, Dunkel, Fancy)
-  src/model/              Logik ohne DOM (Validator, Merge, Progression, Wochen, Live-Training, Verlauf, CSV)
+  src/model/              Logik ohne DOM (Validator, Merge, Progression, Startwerte, Wochen, Live-Training, Verlauf, Coach-Export)
   src/views/              Bildschirme
   src/garmin/             FIT-Encoder und Garmin-Export
   src/legal.js            Betreiberangaben (nur hier pflegen)

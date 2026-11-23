@@ -85,6 +85,7 @@ button { cursor: pointer; touch-action: manipulation; }
 button[aria-pressed="true"] { background: var(--acbg); color: var(--acText); font-weight: 700; }
 .tag { font-size: 13px; padding: 3px 8px; border-radius: 8px; background: var(--row); color: var(--mut); white-space: nowrap; }
 .tag.warn { color: var(--text); border: 1px solid var(--ac); }
+.tag.main { color: var(--text); border: 1px solid var(--line); }
 
 /* Fortschritt */
 .bar { height: 6px; background: var(--row); border-radius: 3px; overflow: hidden; }
@@ -124,6 +125,30 @@ button[aria-pressed="true"] { background: var(--acbg); color: var(--acText); fon
 
 .chips { display: flex; gap: 8px; flex-wrap: wrap; }
 .chips button { flex: 1; min-height: 44px; border: 1px solid var(--line); border-radius: 12px; background: transparent; padding: 0 10px; }
+/* RIR nach dem letzten Satz einer Hauptübung: fünf gleich breite Chips. */
+.rir-panel { display: flex; flex-direction: column; gap: 8px; }
+.rir-panel p { margin: 0; }
+.chips.rir-chips { flex-wrap: nowrap; }
+.rpe { display: flex; flex-direction: column; gap: 2px; }
+.rpe-head { display: flex; justify-content: space-between; align-items: baseline; min-height: 32px; }
+.rpe-value { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.rpe.unset .rpe-value { color: var(--mut); }
+/* Schieberegler: Griff 44 px (Daumen), Spur 6 px. Ohne Wert gedämpfter Griff. */
+.rpe-range { -webkit-appearance: none; appearance: none; width: 100%; height: 44px; margin: 0; background: transparent; touch-action: pan-y; }
+.rpe-range::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: var(--row); border: 1px solid var(--line); }
+.rpe-range::-moz-range-track { height: 6px; border-radius: 3px; background: var(--row); border: 1px solid var(--line); }
+.rpe-range::-webkit-slider-thumb { -webkit-appearance: none; width: 44px; height: 44px; margin-top: -20px; border-radius: 22px; background: var(--acbg); border: 3px solid var(--card); box-shadow: 0 0 0 1px var(--line); }
+.rpe-range::-moz-range-thumb { width: 38px; height: 38px; border-radius: 22px; background: var(--acbg); border: 3px solid var(--card); box-shadow: 0 0 0 1px var(--line); }
+.rpe.unset .rpe-range::-webkit-slider-thumb { background: var(--row); }
+.rpe.unset .rpe-range::-moz-range-thumb { background: var(--row); }
+.rpe-range:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 22px; }
+/* Skalenstriche unter den Rasterpunkten: Mitte des Griffs liegt 22 px vom Rand. */
+.rpe-ticks { display: flex; justify-content: space-between; padding: 0 16px; font-size: 12px; color: var(--mut); font-variant-numeric: tabular-nums; }
+.rpe-ticks span { width: 12px; text-align: center; }
+.rpe-ends { display: flex; justify-content: space-between; }
+/* Gewählter Chip: .chips button setzt den Hintergrund zurück, daher hier noch einmal (sonst dunkle Schrift ohne Hintergrund). */
+.chips button[aria-pressed="true"], .rest .rir-chips button[aria-pressed="true"] { background: var(--acbg); color: var(--acText); border-color: transparent; }
+.chips.rir-chips button { flex: 1 1 0; min-width: 44px; padding: 0; font-size: 17px; font-variant-numeric: tabular-nums; }
 
 details.warmup summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 700; }
 details.warmup ul { margin: 0; padding-left: 20px; }
@@ -229,7 +254,7 @@ details.plan-session summary { min-height: 44px; display: flex; flex-direction: 
   display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0 16px; align-items: center;
 }
 .card.rest { padding: 7px 12px; gap: 0 16px; } /* .card.rest: gilt auch unter 400 px, wo .card { gap: 8px } sonst greift */
-.rest .time { min-width: 0; overflow: hidden; white-space: nowrap; font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.rest .time { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .rest .time small { font-size: 15px; font-weight: 500; color: var(--mut); margin-left: 8px; }
 .rest .btn.sm { min-height: 44px; padding: 0 12px; white-space: nowrap; }
 /* Abschließen ist dann die einzige Aktion (kein Stepper mehr auf dem Bildschirm): Haupt-Aktion, 48 px. */
@@ -237,6 +262,19 @@ details.plan-session summary { min-height: 44px; display: flex; flex-direction: 
 /* Unterste Zeile: Umschalter Liste/Fokus links (unter der Zeit, nicht unter „Weiter“), daneben „Als Nächstes“. */
 .rest .rest-foot { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; min-width: 0; }
 .rest .next { flex: 1; min-width: 0; font-size: 14px; color: var(--mut); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* RIR in der Pausenleiste (nur Fokus): Frage mit Übungsname, darunter die Chips. Abstand 8 px zur Zeile mit
+   „Rückgängig“/„Weiter“, damit keine Tippfläche überlappt (Review r4 iOS M-2). */
+.card.rest.has-rir { row-gap: 8px; }
+.rest .rir-bar { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.rest .rir-title { margin: 0; font-size: 13px; color: var(--mut); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rest .rir-title b { color: var(--text); }
+.rest .rir-chips { display: flex; gap: 6px; min-width: 0; }
+.rest .rir-chips button {
+  flex: 1 1 0; min-width: 0; height: 44px; border: 1px solid var(--line); border-radius: 10px;
+  background: transparent; padding: 0; font-size: 16px; font-variant-numeric: tabular-nums;
+}
+.rir-done summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-size: 15px; }
+.rir-done .rir-edit { color: var(--ac); font-weight: 700; white-space: pre; }
 /* Sichtbar 44 × 32; die Tippfläche reicht nach oben (Zeit, nicht antippbar) und in den Innenabstand: 44 × 45. */
 .rest .view-toggle { height: 32px; position: relative; }
 .rest .view-toggle::after { content: ""; position: absolute; left: 0; right: 0; top: -6px; bottom: -7px; }
@@ -316,6 +354,9 @@ label.field { display: flex; flex-direction: column; gap: 6px; }
 }
 /* Sehr schmal (Seitenzoom ab ca. 150 %): kein horizontales Scrollen. */
 @media (max-width: 330px) {
+  /* Seitenzoom (Review r4 iOS M-5): vier Tabs und RIR-Chips ohne waagrechtes Scrollen */
+  .tabs button { min-width: 0; padding: 0 4px; font-size: 14px; }
+  .chips.rir-chips button { min-width: 0; }
   #app { padding-left: calc(8px + var(--safe-l)); padding-right: calc(8px + var(--safe-r)); }
   .rest { grid-template-columns: 1fr 1fr; }
   .rest .time { grid-column: 1 / -1; }
@@ -361,3 +402,5 @@ label.field { display: flex; flex-direction: column; gap: 6px; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
+
+.plan-blocks .tag.main { margin-left: 6px; }

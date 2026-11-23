@@ -4,7 +4,9 @@
 
 import { resolvePrescription } from './plan.js';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
+/** Älteste Schemaversion, die noch gelesen wird. Gelesene Dateien werden auf SCHEMA_VERSION gehoben. */
+export const MIN_SCHEMA_VERSION = 1;
 
 /** Grenzwerte. Bewusst großzügig für echte Nutzung, aber eng genug gegen Missbrauch. */
 export const LIMITS = Object.freeze({
@@ -33,6 +35,10 @@ export const LIMITS = Object.freeze({
   maxRevision: 1e9,
   maxCycles: 1000, // Durchgänge eines Plans
   maxDeletedSessions: 5000, // gemerkte IDs gelöschter Trainings (älteste fallen zuerst heraus)
+  maxCarryOver: 500, // Startwerte aus dem Vorgänger (eine pro Übung)
+  maxRpe: 10, // RPE eines Trainings: 0 bis 10
+  maxRir: 4, // RIR nach dem letzten Satz: 0 bis 4 (4 = „4+“)
+  maxFileName: 120,
   maxKeys: 200, // Schlüssel pro Objekt (bremst präparierte Dateien mit sehr vielen Feldern)
 });
 
@@ -44,6 +50,7 @@ const SESSION_ID_RE = /^[A-Za-z0-9-]{8,64}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
 const LANG_RE = /^[a-z]{2}(-[A-Z]{2})?$/;
+const FILE_NAME_RE = /^[A-Za-z0-9._-]+\.training\.json$/;
 const UNITS = ['kg', 's', 'bodyweight'];
 const BLOCK_TYPES = ['single', 'superset'];
 const THEMES = ['light', 'dark', 'fancy'];
@@ -202,7 +209,7 @@ const PLAN_SESSION_KEYS = ['key', 'name', 'suggestedDay', 'warmup', 'blocks'];
 const BLOCK_KEYS = ['type', 'exercises'];
 const EXERCISE_KEYS = [
   'id', 'name', 'sets', 'repsMin', 'repsMax', 'durationSec', 'unit', 'perSide', 'restSec',
-  'incrementKg', 'cue', 'variants', 'garminCategory', 'garminSubcategory', 'byWeek',
+  'incrementKg', 'cue', 'variants', 'garminCategory', 'garminSubcategory', 'byWeek', 'main',
 ];
 const BYWEEK_KEYS = ['sets', 'repsMin', 'repsMax', 'durationSec', 'unit', 'cue'];
 const VARIANT_KEYS = ['id', 'name', 'cue'];
@@ -337,6 +344,8 @@ function validateExercise(ctx, raw, path, plan) {
   setIf(ex, 'incrementKg', field(ctx, raw, 'incrementKg', path, { type: 'number', min: 0, max: LIMITS.maxIncrementKg }));
   setIf(ex, 'garminCategory', field(ctx, raw, 'garminCategory', path, { type: 'int', min: 0, max: 65534 }));
   setIf(ex, 'garminSubcategory', field(ctx, raw, 'garminSubcategory', path, { type: 'int', min: 0, max: 65534 }));
+  // Hauptübung (optional, fehlt = nein): nach dem letzten Satz fragt die App nach dem RIR.
+  if (field(ctx, raw, 'main', path, { type: 'bool' })) ex.main = true;
 
   if (has(raw, 'variants') && expectArray(ctx, raw.variants, `${path}.variants`, { max: LIMITS.maxVariants })) {
     const ids = new Set();
@@ -404,9 +413,17 @@ export function validatePlan(raw, path = 'plan') {
 
 // ---------- Trainingsdatei ----------
 
-const FILE_KEYS = ['schemaVersion', 'fileId', 'revision', 'updatedAt', 'plan', 'settings', 'progress', 'sessions', 'deletedSessionIds'];
-const SESSION_KEYS = ['id', 'date', 'sessionKey', 'week', 'cycle', 'deload', 'startedAt', 'endedAt', 'blocks'];
-const LOGGED_BLOCK_KEYS = ['exerciseId', 'variantId', 'sets', 'note', 'skipped', 'plannedSets', 'repsMax', 'durationSec'];
+const FILE_KEYS = [
+  'schemaVersion', 'fileId', 'revision', 'updatedAt', 'createdAt', 'previous', 'carryOver',
+  'plan', 'settings', 'progress', 'sessions', 'deletedSessionIds',
+];
+const PREVIOUS_KEYS = ['fileId', 'fileName', 'planName'];
+const CARRY_KEYS = ['exerciseId', 'date', 'variantId', 'plannedSets', 'repsMax', 'durationSec', 'sets', 'note'];
+const CARRY_SET_KEYS = ['kg', 'reps', 'sec'];
+const SESSION_KEYS = ['id', 'date', 'sessionKey', 'week', 'cycle', 'deload', 'startedAt', 'endedAt', 'rpe', 'note', 'blocks'];
+const LOGGED_BLOCK_KEYS = [
+  'exerciseId', 'name', 'variantId', 'variantName', 'sets', 'note', 'skipped', 'rirLast', 'plannedSets', 'repsMax', 'durationSec',
+];
 const SET_KEYS = ['kg', 'reps', 'sec', 'done', 'doneAt'];
 
 function isoField(ctx, o, key, path, { required, nullable }) {
@@ -416,6 +433,15 @@ function isoField(ctx, o, key, path, { required, nullable }) {
     return undefined;
   }
   return v;
+}
+
+function dateField(ctx, o, key, path, { required }) {
+  const date = field(ctx, o, key, path, { type: 'string', required, max: 10, pattern: DATE_RE, patternMsg: 'Datum im Format JJJJ-MM-TT erwartet' });
+  if (date !== undefined && !validDate(date)) {
+    ctx.err(`${path}.${key}`, 'ungültiges Datum');
+    return undefined;
+  }
+  return date;
 }
 
 function validDate(s) {
@@ -428,9 +454,7 @@ function validateLoggedSession(ctx, raw, path) {
   if (!expectObject(ctx, raw, path, SESSION_KEYS)) return undefined;
   const s = {};
   setIf(s, 'id', field(ctx, raw, 'id', path, { type: 'string', required: true, max: 64, pattern: SESSION_ID_RE, patternMsg: 'ungültige ID' }));
-  const date = field(ctx, raw, 'date', path, { type: 'string', required: true, max: 10, pattern: DATE_RE, patternMsg: 'Datum im Format JJJJ-MM-TT erwartet' });
-  if (date !== undefined && !validDate(date)) ctx.err(`${path}.date`, 'ungültiges Datum');
-  else setIf(s, 'date', date);
+  setIf(s, 'date', dateField(ctx, raw, 'date', path, { required: true }));
   setIf(s, 'sessionKey', field(ctx, raw, 'sessionKey', path, { type: 'string', required: true, max: 20, pattern: KEY_RE, patternMsg: 'ungültiger Schlüssel' }));
   setIf(s, 'week', field(ctx, raw, 'week', path, { type: 'int', required: true, min: 1, max: LIMITS.maxWeeks }));
   // Durchgang und Deload-Kennzeichen (optional, ältere Dateien haben sie nicht)
@@ -442,6 +466,10 @@ function validateLoggedSession(ctx, raw, path) {
   if (s.startedAt && s.endedAt && Date.parse(s.endedAt) < Date.parse(s.startedAt)) {
     ctx.err(`${path}.endedAt`, 'liegt vor startedAt');
   }
+  // RPE und Notiz zum ganzen Training (optional, ab Schema 2)
+  setIf(s, 'rpe', field(ctx, raw, 'rpe', path, { type: 'int', min: 0, max: LIMITS.maxRpe }));
+  const note = field(ctx, raw, 'note', path, { type: 'string', max: LIMITS.maxNote, nonEmpty: false });
+  if (note) s.note = note;
   if (!has(raw, 'blocks')) ctx.err(path, 'blocks fehlt');
   else if (expectArray(ctx, raw.blocks, `${path}.blocks`, { max: LIMITS.maxLoggedBlocks })) {
     s.blocks = raw.blocks.map((b, i) => validateLoggedBlock(ctx, b, `${path}.blocks[${i}]`));
@@ -453,12 +481,18 @@ function validateLoggedBlock(ctx, raw, path) {
   if (!expectObject(ctx, raw, path, LOGGED_BLOCK_KEYS)) return undefined;
   const b = {};
   setIf(b, 'exerciseId', field(ctx, raw, 'exerciseId', path, { type: 'string', required: true, max: 64, pattern: ID_RE, patternMsg: 'ungültige Übungs-ID' }));
+  // Namen zum Zeitpunkt des Trainings (optional, ab Schema 2), damit das Training ohne den Plan lesbar bleibt.
+  setIf(b, 'name', field(ctx, raw, 'name', path, { type: 'string', max: LIMITS.maxName }));
   const variant = field(ctx, raw, 'variantId', path, { type: 'string', nullable: true, max: 64, pattern: ID_RE, patternMsg: 'ungültige Varianten-ID' });
   b.variantId = variant ?? null;
+  const variantName = field(ctx, raw, 'variantName', path, { type: 'string', nullable: true, max: LIMITS.maxName });
+  if (variantName) b.variantName = variantName;
   const note = field(ctx, raw, 'note', path, { type: 'string', max: LIMITS.maxNote, nonEmpty: false });
   b.note = note ?? '';
   const skipped = field(ctx, raw, 'skipped', path, { type: 'bool' });
   if (skipped) b.skipped = true;
+  // RIR nach dem letzten Satz einer Hauptübung (optional, ab Schema 2)
+  setIf(b, 'rirLast', field(ctx, raw, 'rirLast', path, { type: 'int', min: 0, max: LIMITS.maxRir }));
   // Beim Start gültige Vorgabe (optional, ältere Dateien haben sie nicht)
   setIf(b, 'plannedSets', field(ctx, raw, 'plannedSets', path, { type: 'int', min: 1, max: LIMITS.maxSets }));
   setIf(b, 'repsMax', field(ctx, raw, 'repsMax', path, { type: 'int', min: 1, max: LIMITS.maxReps }));
@@ -483,7 +517,52 @@ function validateLoggedBlock(ctx, raw, path) {
   return b;
 }
 
-/** Validiert eine komplette .training.json. Wirft ValidationError, sonst bereinigte Kopie. */
+function validatePrevious(ctx, raw, path) {
+  if (!expectObject(ctx, raw, path, PREVIOUS_KEYS)) return undefined;
+  const out = {};
+  setIf(out, 'fileId', field(ctx, raw, 'fileId', path, { type: 'string', required: true, max: 36, pattern: UUID_RE, patternMsg: 'UUID erwartet' }));
+  setIf(out, 'fileName', field(ctx, raw, 'fileName', path, { type: 'string', required: true, max: LIMITS.maxFileName, pattern: FILE_NAME_RE, patternMsg: 'Dateiname wie "plan-2026-01-31.training.json" erwartet' }));
+  setIf(out, 'planName', field(ctx, raw, 'planName', path, { type: 'string', required: true, max: LIMITS.maxName }));
+  return out;
+}
+
+/** Startwerte aus dem Vorgänger: letzte Leistung pro Übung mit der damals gültigen Vorgabe. */
+function validateCarryOver(ctx, raw, path) {
+  if (!expectArray(ctx, raw, path, { max: LIMITS.maxCarryOver })) return undefined;
+  const ids = new Set();
+  return raw.map((e, i) => {
+    const p = `${path}[${i}]`;
+    if (!expectObject(ctx, e, p, CARRY_KEYS)) return undefined;
+    const out = {};
+    const id = field(ctx, e, 'exerciseId', p, { type: 'string', required: true, max: 64, pattern: ID_RE, patternMsg: 'ungültige Übungs-ID' });
+    if (id !== undefined) {
+      if (ids.has(id)) ctx.err(`${p}.exerciseId`, `"${id}" ist doppelt`);
+      ids.add(id);
+      out.exerciseId = id;
+    }
+    setIf(out, 'date', dateField(ctx, e, 'date', p, { required: true }));
+    out.variantId = field(ctx, e, 'variantId', p, { type: 'string', nullable: true, max: 64, pattern: ID_RE, patternMsg: 'ungültige Varianten-ID' }) ?? null;
+    setIf(out, 'plannedSets', field(ctx, e, 'plannedSets', p, { type: 'int', required: true, min: 1, max: LIMITS.maxSets }));
+    setIf(out, 'repsMax', field(ctx, e, 'repsMax', p, { type: 'int', min: 1, max: LIMITS.maxReps }));
+    setIf(out, 'durationSec', field(ctx, e, 'durationSec', p, { type: 'int', min: 1, max: LIMITS.maxDurationSec }));
+    if (!has(e, 'sets')) ctx.err(p, 'sets fehlt');
+    else if (expectArray(ctx, e.sets, `${p}.sets`, { min: 1, max: LIMITS.maxLoggedSets })) {
+      out.sets = e.sets.map((st, k) => {
+        const q = `${p}.sets[${k}]`;
+        if (!expectObject(ctx, st, q, CARRY_SET_KEYS)) return undefined;
+        return {
+          kg: field(ctx, st, 'kg', q, { type: 'number', nullable: true, min: 0, max: LIMITS.maxKg }) ?? null,
+          reps: field(ctx, st, 'reps', q, { type: 'int', nullable: true, min: 0, max: LIMITS.maxLoggedReps }) ?? null,
+          sec: field(ctx, st, 'sec', q, { type: 'number', nullable: true, min: 0, max: LIMITS.maxLoggedSec }) ?? null,
+        };
+      });
+    }
+    const note = field(ctx, e, 'note', p, { type: 'string', max: LIMITS.maxNote, nonEmpty: false });
+    if (note) out.note = note;
+    return out;
+  });
+}
+
 /** Prüft eine einzelne protokollierte Session (z. B. das laufende Training aus dem Browserspeicher). */
 export function validateSession(raw) {
   const ctx = new Ctx();
@@ -493,6 +572,10 @@ export function validateSession(raw) {
   return s;
 }
 
+/**
+ * Validiert eine komplette .training.json (Schema 1 oder 2). Wirft ValidationError, sonst bereinigte Kopie.
+ * Die Kopie hat immer schemaVersion = SCHEMA_VERSION: Schema 2 ergänzt nur optionale Felder.
+ */
 export function validateTrainingFile(raw) {
   const ctx = new Ctx();
   if (!expectObject(ctx, raw, 'Datei', FILE_KEYS)) ctx.throwIfErrors();
@@ -501,10 +584,16 @@ export function validateTrainingFile(raw) {
   if (Number.isInteger(sv) && sv > SCHEMA_VERSION) {
     throw new ValidationError([`schemaVersion: Datei stammt aus einer neueren App-Version (${sv}). Bitte die App aktualisieren.`]);
   }
-  setIf(f, 'schemaVersion', field(ctx, raw, 'schemaVersion', 'Datei', { type: 'int', required: true, min: 1, max: SCHEMA_VERSION }));
+  if (field(ctx, raw, 'schemaVersion', 'Datei', { type: 'int', required: true, min: MIN_SCHEMA_VERSION, max: SCHEMA_VERSION }) !== undefined) {
+    f.schemaVersion = SCHEMA_VERSION;
+  }
   setIf(f, 'fileId', field(ctx, raw, 'fileId', 'Datei', { type: 'string', required: true, max: 36, pattern: UUID_RE, patternMsg: 'UUID erwartet' }));
   setIf(f, 'revision', field(ctx, raw, 'revision', 'Datei', { type: 'int', required: true, min: 0, max: LIMITS.maxRevision }));
   setIf(f, 'updatedAt', isoField(ctx, raw, 'updatedAt', 'Datei', { required: true }));
+  // Ab Schema 2, optional: Anlage der Datei, Vorgänger und Startwerte aus dem Vorgänger.
+  setIf(f, 'createdAt', isoField(ctx, raw, 'createdAt', 'Datei', { required: false }));
+  if (has(raw, 'previous')) setIf(f, 'previous', validatePrevious(ctx, raw.previous, 'previous'));
+  if (has(raw, 'carryOver')) setIf(f, 'carryOver', validateCarryOver(ctx, raw.carryOver, 'carryOver'));
 
   if (!has(raw, 'plan')) ctx.err('Datei', 'plan fehlt');
   else f.plan = validatePlanInto(ctx, raw.plan, 'plan');

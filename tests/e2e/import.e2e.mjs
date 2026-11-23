@@ -77,16 +77,20 @@ if (!lastLine.includes('Zuletzt: Einheit 1 – schwer, heute')) problems.push(`H
 const backup = await page.getByRole('region', { name: 'Backup' }).textContent();
 if (!backup.includes('Alle Trainings gesichert')) problems.push(`Backup-Status nach Export: ${backup}`);
 
-// Plan-Tab: Woche setzen, CSV
+// Plan-Tab: Woche setzen, Export für Coach
 await btn(page, 'Plan', true).click();
 await btn(page, 'Woche vor').click();
 if ((await page.locator('.week-num').textContent()) !== '2') problems.push('Woche nicht gesetzt');
 await shot('i05-plan');
-const [csv] = await Promise.all([page.waitForEvent('download'), btn(page, 'Verlauf als CSV exportieren').click()]);
-const csvPath = `${tmp}/${csv.suggestedFilename()}`;
-await csv.saveAs(csvPath);
-const csvText = readFileSync(csvPath, 'utf8');
-if (!csvText.includes('Trap Bar Jump') || !csvText.startsWith('﻿Datum;')) problems.push('CSV-Inhalt unerwartet');
+await btn(page, 'Export für Coach', true).click();
+const [coach] = await Promise.all([page.waitForEvent('download'), page.locator('[data-fid="coach-share"]').click()]);
+if (!/-coach\.md$/.test(coach.suggestedFilename())) problems.push(`Export für Coach: Dateiname ${coach.suggestedFilename()}`);
+const coachPath = `${tmp}/${coach.suggestedFilename()}`;
+await coach.saveAs(coachPath);
+const coachText = readFileSync(coachPath, 'utf8');
+if (!coachText.startsWith('# Training: Export für Coach') || !coachText.includes('## Log') || !coachText.includes('Trap Bar Jump')) problems.push('Export für Coach: Inhalt unerwartet');
+if (/fileId|"revision"|doneAt/.test(coachText)) problems.push('Export für Coach enthält technische Felder');
+await btn(page, 'Schließen', true).click();
 await run.browser.close();
 
 // Leerer Speicher: Wiederherstellung per Import

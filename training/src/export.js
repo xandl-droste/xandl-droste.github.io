@@ -1,11 +1,11 @@
 // Export der .training.json: primär Teilen-Menü mit Datei, sonst Download.
 // Ein Abbruch im Teilen-Menü gilt nicht als Export.
 
-import { serialize, trainingFileName } from './model/training-file.js';
+import { serialize, fileNameOf } from './model/training-file.js';
 
 /** @returns {Promise<{ok: boolean, method?: 'share'|'download', aborted?: boolean}>} */
 export async function exportTrainingFile(file) {
-  const name = trainingFileName(file.plan.name);
+  const name = fileNameOf(file);
   const blob = new Blob([serialize(file)], { type: 'application/json' });
   return shareOrDownload(blob, name, 'application/json');
 }

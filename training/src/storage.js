@@ -80,7 +80,7 @@ async function guardedWrite(stores, write, { force = false } = {}) {
   await run([...new Set([...stores, 'kv'])], 'readwrite', async (tx) => {
     const kv = tx.objectStore('kv');
     if (!force && isStale(await req(kv.get('stamp')), knownStamp)) throw new StaleError();
-    write(tx);
+    await write(tx);
     kv.put(stamp, 'stamp');
   });
   knownStamp = stamp;
@@ -154,11 +154,56 @@ export function getLastExport(fileId) {
   return run(['kv'], 'readonly', (tx) => req(tx.objectStore('kv').get(`lastExport:${fileId}`))).then((v) => v ?? null);
 }
 
-/** Import übernehmen: Datei als aktiv speichern und ggf. Exportstand setzen, in einer Transaktion. */
-export function saveImported(file, lastExport) {
-  return guardedWrite(['files'], (tx) => {
+/**
+ * Import oder Wechsel übernehmen: Datei als aktiv speichern und ggf. Exportstand setzen, in einer Transaktion.
+ * dropFileId: bisherige Trainingsdatei, die beim Wechsel aus dem Browserspeicher entfernt wird (ab 2.0 liegt nur die
+ * aktive Trainingsdatei im Browser; die bisherige muss vorher gesichert sein, das prüft die App).
+ * Beim Entfernen gilt immer der Schutz gegen ein veraltetes Fenster (Review r4 Security M1): Hat ein anderes Fenster
+ * inzwischen gespeichert (stamp) oder liegt die bisherige Datei mit höherer Revision als expectRevision im Browser,
+ * wird nichts geschrieben (StaleError).
+ * force: ohne Prüfung auf ein anderes Fenster, nur ohne dropFileId (ausdrückliche Übernahme eines Imports).
+ */
+export function saveImported(file, lastExport, { dropFileId = null, expectRevision = null, force = true } = {}) {
+  const drop = dropFileId && dropFileId !== file.fileId ? dropFileId : null;
+  return guardedWrite(['files'], async (tx) => {
+    if (drop && expectRevision != null) {
+      const stored = await req(tx.objectStore('files').get(drop));
+      if (stored && Number(stored.revision) > expectRevision) throw new StaleError();
+    }
     tx.objectStore('files').put(file);
     tx.objectStore('kv').put(file.fileId, 'activeFileId');
     if (lastExport) tx.objectStore('kv').put(lastExport, `lastExport:${file.fileId}`);
-  }, { force: true });
+    if (drop) {
+      tx.objectStore('files').delete(drop);
+      tx.objectStore('kv').delete(`lastExport:${drop}`);
+    }
+  }, { force: force && !drop });
+}
+
+/** Eine Trainingsdatei aus dem Browser lesen (ungeprüft) oder null. */
+export function getFile(fileId) {
+  return run(['files'], 'readonly', (tx) => req(tx.objectStore('files').get(fileId))).then((v) => v ?? null);
+}
+
+/** Alle Trainingsdateien im Browser außer der aktiven, jeweils mit dem Stand der letzten Sicherung (oder null). */
+export async function listOtherFiles() {
+  return run(['files', 'kv'], 'readonly', async (tx) => {
+    const kv = tx.objectStore('kv');
+    const activeId = await req(kv.get('activeFileId'));
+    const all = await req(tx.objectStore('files').getAll());
+    const out = [];
+    for (const file of all) {
+      if (!file || file.fileId === activeId) continue;
+      out.push({ file, lastExport: (await req(kv.get(`lastExport:${file.fileId}`))) ?? null });
+    }
+    return out;
+  });
+}
+
+/** Eine nicht aktive Trainingsdatei aus dem Browser entfernen (die aktive nie). */
+export function deleteFile(fileId) {
+  return guardedWrite(['files'], (tx) => {
+    tx.objectStore('files').delete(fileId);
+    tx.objectStore('kv').delete(`lastExport:${fileId}`);
+  });
 }

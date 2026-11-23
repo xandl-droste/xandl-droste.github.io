@@ -10,6 +10,7 @@ function exerciseLine(plan, ex, week, prefix) {
   const item = { unit: p.unit, plannedSets: p.sets, repsMin: p.repsMin, repsMax: p.repsMax, durationSec: p.durationSec, perSide: p.perSide };
   return h('li', {},
     h('span', {}, `${prefix}${ex.name}`), h('span', { class: 'mut' }, ` · ${fmtTarget(item)}`),
+    ex.main ? h('span', { class: 'tag main' }, h('span', { 'aria-hidden': 'true' }, 'Haupt'), h('span', { class: 'sr-only' }, 'Hauptübung')) : null,
     p.cue ? h('div', { class: 'mut small' }, p.cue) : null,
     ex.variants?.length ? h('div', { class: 'mut small' }, `Varianten: ${ex.variants.map((v) => v.name).join(', ')}`) : null);
 }
@@ -27,6 +28,7 @@ export function planScreen(file, A) {
     h('section', { class: 'card', 'aria-label': 'Aktueller Plan' },
       h('h3', {}, plan.name),
       h('p', { class: 'mut' }, `${plan.sessions.length} Einheiten pro Woche · ${plan.weeks} Wochen${cycle > 1 ? ` · Durchgang ${cycle}` : ''}`),
+      file.previous ? h('p', { class: 'mut small', 'data-fid': 'previous' }, `Vorgänger: ${file.previous.planName} (${file.previous.fileName})`) : null,
       h('p', { class: 'mut small' }, 'Keine medizinische Beratung. Bei Beschwerden bitte ärztlich oder physiotherapeutisch abklären.'),
       completed ? h('span', { class: 'tag' }, 'abgeschlossen') : null,
       h('div', { class: 'stp' },
@@ -42,14 +44,22 @@ export function planScreen(file, A) {
     h('button', { class: 'btn ghost', onclick: A.openFiles }, 'Plan öffnen (Datei)'),
     h('button', { class: 'btn ghost', onclick: A.agentPrompt }, 'Plan mit KI erstellen oder anpassen'),
     h('button', { class: 'btn ghost', onclick: A.exportAll }, 'Gesamtstand sichern'),
-    h('button', { class: 'btn ghost', onclick: A.exportCsv }, 'Verlauf als CSV exportieren'),
+    h('button', { class: 'btn ghost', 'data-fid': 'coach-export', onclick: A.coachExport }, 'Export für Coach'),
     h('h2', { class: 'section-title' }, `Woche ${w} im Detail`),
-    plan.sessions.map((ps) => h('details', { class: 'card plan-session' },
-      h('summary', {}, h('span', {}, ps.name), ps.suggestedDay ? h('span', { class: 'mut small' }, ps.suggestedDay) : null),
-      ps.warmup?.length ? h('p', { class: 'mut small' }, `Warm-up: ${ps.warmup.join(' · ')}`) : null,
-      h('ol', { class: 'plan-blocks' },
-        ps.blocks.map((b) => (b.type === 'superset'
-          ? h('li', {}, h('span', { class: 'mut small' }, 'Superset'), h('ul', {}, b.exercises.map((ex, i) => exerciseLine(plan, ex, w, i === 0 ? 'a) ' : 'b) '))))
-          : h('li', {}, h('ul', {}, exerciseLine(plan, b.exercises[0], w, ''))))))))
+    hasMain(plan) ? h('p', { class: 'mut small', 'data-fid': 'main-hint' }, '„Haupt“ = Hauptübung: Nach dem letzten Satz fragt die App, wie viele Wiederholungen noch gegangen wären (RIR).') : null,
+    planSessionsDetail(plan, w),
   ];
+}
+
+const hasMain = (plan) => plan.sessions.some((ps) => ps.blocks.some((b) => b.exercises.some((ex) => ex.main)));
+
+/** Einheiten des Plans mit den Vorgaben einer Woche (zum Aufklappen). Auch im Archiv, nur lesend. */
+export function planSessionsDetail(plan, w) {
+  return plan.sessions.map((ps) => h('details', { class: 'card plan-session' },
+    h('summary', {}, h('span', {}, ps.name), ps.suggestedDay ? h('span', { class: 'mut small' }, ps.suggestedDay) : null),
+    ps.warmup?.length ? h('p', { class: 'mut small' }, `Warm-up: ${ps.warmup.join(' · ')}`) : null,
+    h('ol', { class: 'plan-blocks' },
+      ps.blocks.map((b) => (b.type === 'superset'
+        ? h('li', {}, h('span', { class: 'mut small' }, 'Superset'), h('ul', {}, b.exercises.map((ex, i) => exerciseLine(plan, ex, w, i === 0 ? 'a) ' : 'b) '))))
+        : h('li', {}, h('ul', {}, exerciseLine(plan, b.exercises[0], w, ''))))))));
 }

@@ -294,23 +294,26 @@ test('Steigerung übernehmen nach Rückkehr auf 6 Wdh.: neues Gewicht, 6 Wdh.', 
 
 // ---------- Import ----------
 
-test('Plan-Import bei vorhandenem Stand: drei Möglichkeiten, Vorbelegung, Fortschritt neu abgeleitet', async () => {
+test('Plan-Import bei vorhandener Trainingsdatei: Anpassen, Nachfolger, Ganz neu, Vorbelegung, Fortschritt neu abgeleitet', async () => {
   const sessions = [];
   for (let w = 1; w <= 7; w++) for (const key of ['E1', 'E2']) sessions.push(unit({ key, week: w }));
   const completed = { ...createTrainingFile(plan), revision: 9, sessions, progress: { currentWeek: 7, status: 'completed' } };
   const running = { ...completed, sessions: sessions.slice(0, 6), progress: { currentWeek: 4, status: 'active' } };
-  assert.equal(defaultPlanChoice(completed), 'cycle');
+  assert.equal(defaultPlanChoice(completed), 'successor');
   assert.equal(defaultPlanChoice(running), 'keep');
   const r = await readImportFiles([fakeFile('plan.json', planText)]);
   const pv = previewImport(completed, r.items)[0];
-  assert.deepEqual([pv.action, pv.defaultChoice, pv.currentWeek, pv.historyCount], ['choose', 'cycle', 7, 14]);
+  assert.deepEqual([pv.action, pv.defaultChoice, pv.currentWeek, pv.historyCount], ['choose', 'successor', 7, 14]);
   assert.equal(previewImport(running, r.items)[0].defaultChoice, 'keep');
 
-  // Vorbelegung (keine Wahl): neuer Durchgang, Woche 1, Historie bleibt
-  const c = applyImports(completed, r.items, {}).file;
-  assert.deepEqual(c.progress, { currentWeek: 1, status: 'active', cycle: 2 });
-  assert.equal(c.sessions.length, 14);
-  assert.equal(c.fileId, completed.fileId);
+  // Vorbelegung (keine Wahl): Nachfolger in einer neuen Trainingsdatei, Woche 1, Verweis und Startwerte
+  const c = applyImports(completed, r.items, {}, { now: new Date('2026-03-01T08:00:00Z') }).file;
+  assert.deepEqual(c.progress, { currentWeek: 1, status: 'active' });
+  assert.equal(c.sessions.length, 0);
+  assert.notEqual(c.fileId, completed.fileId);
+  assert.equal(c.previous.fileId, completed.fileId);
+  assert.ok(c.carryOver.some((x) => x.exerciseId === 'back-squat'), 'Startwerte aus dem Vorgänger');
+  assert.equal(completed.sessions.length, 14, 'bisherige Trainingsdatei unverändert');
   // Anpassen: gleiche Woche, gleicher Durchgang; danach abgeleitet (alle Wochen fertig → abgeschlossen, ohne Dialog)
   const k = applyImports(completed, r.items, { 0: 'keep' }).file;
   assert.deepEqual(k.progress, { currentWeek: 7, status: 'completed' });
@@ -320,8 +323,11 @@ test('Plan-Import bei vorhandenem Stand: drei Möglichkeiten, Vorbelegung, Forts
   const n = applyImports(running, r.items, { 0: 'new' }).file;
   assert.equal(n.sessions.length, 0);
   assert.notEqual(n.fileId, running.fileId);
+  assert.equal(n.previous, undefined);
+  assert.equal(n.carryOver, undefined);
   // Unbekannte Wahl fällt auf die Vorbelegung zurück
-  assert.equal(applyImports(completed, r.items, { 0: 'quatsch' }).file.progress.cycle, 2);
+  assert.equal(applyImports(completed, r.items, { 0: 'quatsch' }).file.previous?.fileId, completed.fileId);
+  assert.equal(applyImports(completed, r.items, { 0: 'cycle' }).file.previous?.fileId, completed.fileId, 'alte Wahl „Von vorn“ gibt es nicht mehr');
   for (const f of [c, k, k2, n]) assert.doesNotThrow(() => roundTrip(f));
 });
 

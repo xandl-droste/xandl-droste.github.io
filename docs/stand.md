@@ -22,6 +22,33 @@ Veröffentlicht wird mit `develop` → `main` als Merge-Commit (README: GitHub P
 
 ## Offen
 
+### In Arbeit: Version 2.0 (Stand 2026-11-23)
+
+Vorhaben: Hauptübungen, RIR, RPE und Notiz pro Training, Coach-Export, eine Trainingsdatei pro Durchgang, Archiv. Abgestimmter Entwurf: `docs/entwurf-2.0.md`. Begriffe: `docs/begriffe.md`.
+
+| Schritt (Entwurf Abschnitt 6) | Stand |
+|---|---|
+| 1 Datenmodell Schema 2, Startwerte, RIR/RPE/Notiz im Modell, Dateiname mit Datum | erledigt (Commit „2.0 Schritt 1“), `npm test` 163/163, `npm run e2e` grün |
+| 2 UI: Tag „Haupt“, RIR-Chips, RPE und Notiz im Abschluss-Dialog, Korrektur im Verlauf | erledigt: Tag „Haupt“ (Training, Plan-Tab), RIR-Chips in der Pausenleiste nach dem letzten Satz, sonst in der Karte bzw. im Fokus nach der letzten Übung, RPE als Schieberegler (Betreiber: statt 6 + 5 Chips; startet ohne Wert, Wörter von „Ruhe“ bis „maximal“, „Zurücksetzen“) und Notiz im Abschluss-Dialog, Anzeige und Korrektur im Verlauf. `npm test` 179/179, `npm run e2e` grün inkl. neuem `tests/e2e/rir.e2e.mjs` |
+| 3 Coach-Export, CSV-Export entfernen, Agent-Prompt (`main`, RIR in den Ergebnissen) | erledigt: Button „Export für Coach“ im Plan-Tab mit Vorschau, „Teilen“ als `<datei>-coach.md` und „Kopieren“. CSV-Export entfernt (`csv.js`, Test, Button). Modell und Agent-Prompt vom Subagenten (u. a. Deload-Wochen mit reduzierten Sätzen in den Vorgaben, RIR im Log als `@4` mit Legende „4 = 4+“, im Prompt „RIR 4+“, Ergebnisse auch aus Startwerten). `npm test` 178/178, `npm run e2e` grün |
+| 4 Abläufe Nachfolger / Ganz neu / Plan erneut starten, Sichern vor dem Wechsel, Browserspeicher aufräumen | erledigt: Import-Wahl „Anpassen / Nachfolger / Ganz neu“ („Von vorn“ entfällt, Vorbelegung bei abgeschlossenem Plan „Nachfolger“). „Plan erneut starten“ legt einen Nachfolger mit demselben Plan an. Vor jedem Wechsel auf eine andere Trainingsdatei „Erst sichern“ (nur wenn ungesichert, Abbrechen bricht ab), danach wird die bisherige im selben Schreibvorgang aus dem Browser entfernt. Beim Start: gesicherte ältere Trainingsdateien werden still entfernt, ungesicherte angeboten (Sichern, Verwerfen mit Rückfrage, Später). Plan-Tab zeigt den Vorgänger. `npm test` 178/178, `npm run e2e` grün inkl. neuem `tests/e2e/durchgang.e2e.mjs` |
+| 5 Archiv-Tab | erledigt: vierter Tab „Archiv“ (auch vom Start ohne Plan erreichbar). Trainingsdatei oder Plandatei nur lesend ansehen, nur im Arbeitsspeicher: Kopf mit Datei- und Planname, Anzahl Trainings, Vorgänger; Trainings mit Graph und Detailansicht ohne Korrekturen und Löschen; Plan mit Wochenwahl; Export für Coach und Garmin-Export. Hinweis, wenn die aktive Trainingsdatei geöffnet wird. `npm test` 178/178, `npm run e2e` grün inkl. neuem `tests/e2e/archiv.e2e.mjs` |
+| 6 Spezifikation, README, CHANGELOG, Browser-Prüfung, danach Reviews (Spezifikation Abschnitt 9) | erledigt: Spezifikation und README auf 2.0, Reviewer 4 Code-Qualität in Abschnitt 9 aufgenommen (Betreiber: vier Reviewer wie seit Runde 3). Review Runde 4 mit vier Reviewern ohne kritische oder hohe Findings, alle mittleren behoben bzw. begründet, Antworten in `reviews/umsetzung-r4.md`. Entscheidungen des Betreibers dazu: Dateinamen mit 4 Zeichen der fileId, Rückfrage nach Sicherung per Download, Legal N1/N2 ohne Änderung (Weitergabe macht der Nutzer selbst). `CHANGELOG.md` 2.0.0 ohne „in Arbeit“. `npm test` 183/183, `npm run e2e` grün (Chromium) |
+
+Selbst getroffene Entscheidungen in Schritt 2: RIR-Chips in der Pausenleiste ersetzen während dieser Pause die Zeile „Als Nächstes“ (Chips 40 px hoch, Tippfläche 44 px), damit der Fokus auf 375 × 630 passt. Ein Tipp auf den gewählten RIR-Wert nimmt ihn heraus. Gewählte Chips waren durch eine CSS-Regel unsichtbar (auch Varianten-Chips in 1.x), behoben.
+
+Entscheidungen aus Schritt 1 (siehe Commit): Namen älterer Trainings werden erst beim Ersetzen des Plans eingetragen, nicht beim Lesen. `main: false` wird nicht gespeichert. RIR entfällt, sobald ein Satz der Übung wieder geöffnet oder ein Satz hinzugefügt wird. Ein Nachfolger übernimmt die Einstellungen. Version steht schon auf 2.0.0 (Test Major = `SCHEMA_VERSION`), `CHANGELOG.md` mit „in Arbeit“.
+
+Selbst getroffene Entscheidungen in Schritt 5: Das Archiv zeigt den Plan ab der Woche, in der die Datei zuletzt stand. Eine geöffnete Plandatei hat keinen Coach-Export (keine Trainings). Ohne aktive Trainingsdatei gibt es im Archiv keine Tabs, sondern „‹ Start“.
+
+Selbst getroffene Entscheidungen in Schritt 4: Ungesicherte ältere Trainingsdateien werden nicht nach dem ersten Angebot gelöscht, sondern bei jedem Start wieder angeboten, bis sie gesichert oder ausdrücklich verworfen sind (sonst ginge Ungesichertes verloren). Eine eben aus einer Datei geöffnete Trainingsdatei gilt als gesichert. `startNewCycle` bleibt im Modell (alte Tests), die App nutzt es nicht mehr. Alte Dateien mit mehreren Durchgängen zeigen weiter „Durchgang N“.
+
+**Übergabe ins öffentliche Repo (2026-11-23):** erledigt. Stand per `git merge --squash` als ein Commit auf `feature/version-2` ab `develop`, eigene Commit-Nachricht ohne Zwischen-Commits und Session-Links, Hinweis auf das private Repo entfernt (Legal N6).
+
+**Nächster Schritt:** Test am iPhone mit der Checkliste aus `reviews/ios-ux-r4.md` (besonders Punkt 4: RPE-Regler).
+
+Browser-Prüfungen in der Cloud-Sitzung: Playwright ist vorinstalliert unter `/opt/node-tools/node_modules`. Einmal `mkdir -p node_modules && ln -sfn /opt/node-tools/node_modules/playwright node_modules/playwright && ln -sfn /opt/node-tools/node_modules/playwright-core node_modules/playwright-core`, dann App auf Port 8765 ausliefern und `npm run e2e`.
+
 ### Wo wir stehen (2026-11-21, nach Review Runde 3)
 
 - Schritt 9, die Rückmeldungen aus der ersten Testfahrt und Review Runde 3 (`reviews/*-r3.md`, Antworten in `reviews/umsetzung-r3.md`) sind auf `main` und live.
@@ -85,7 +112,7 @@ Veröffentlicht wird mit `develop` → `main` als Merge-Commit (README: GitHub P
 - **Training beenden unten:** In der Liste steht am Ende immer „Training beenden“ (nach dem letzten Satz als Haupt-Button mit „Alle Sätze erledigt“). Im Timer ersetzt dann „Abschließen“ den Button „Weiter“, „+30 s“ entfällt.
 - **Querformat auf Touch-Geräten:** volle Bildschirmbreite (`orientation: landscape` und `pointer: coarse`), Sheets bis 640 px. Desktop-Browser behalten die 430-px-Spalte.
 - **Neue Grenze `LIMITS.maxKeys` = 200** Schlüssel pro Objekt beim Import.
-- **Wechsel auf einen anderen Trainingsstand** (Import mit anderer `fileId`) behält den bisherigen im Browserspeicher, macht ihn aber nicht mehr aktiv. Es gibt noch keine Auswahl zwischen mehreren gespeicherten Ständen.
+- **Wechsel auf einen anderen Trainingsstand** (Import mit anderer `fileId`): bis 1.x blieb der bisherige im Browserspeicher. Ab 2.0 verlässt er den Browser (vorher gesichert), siehe „In Arbeit: Version 2.0“.
 
 ## Bekannte Grenzen
 

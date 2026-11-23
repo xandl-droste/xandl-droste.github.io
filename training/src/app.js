@@ -9,25 +9,29 @@ if (window.top !== window.self) {
 import { h, icon } from './dom.js';
 import { fmtNum } from './format.js';
 import { parseImportText, ValidationError, validateTrainingFile, validateSession } from './model/validate.js';
-import { createTrainingFile, bumpRevision, trainingFileName, themeFor, deleteSession } from './model/training-file.js';
+import { createTrainingFile, bumpRevision, fileNameOf, themeFor, deleteSession } from './model/training-file.js';
 import { findPlanSession, estimateMinutes } from './model/plan.js';
-import { nextPlanSession, setCurrentWeek, repeatWeek, startNewCycle, countsAsUnitDone, doneShare, cycleOf } from './model/weeks.js';
-import { updateLoggedSet, setLoggedNote, nameIndex, loggedUnit, lastTrained } from './model/history.js';
+import { nextPlanSession, setCurrentWeek, repeatWeek, countsAsUnitDone, doneShare, cycleOf } from './model/weeks.js';
+import { createSuccessorFile } from './model/carry-over.js';
+import { needsBackupFirst, isSwitch, classifyOtherFiles, mergeWithStored } from './model/switch.js';
+import { updateLoggedSet, setLoggedNote, setLoggedRir, setSessionRpe, setSessionNote, nameIndex, loggedUnit, lastTrained } from './model/history.js';
 import { backupStatus, backupText } from './model/backup.js';
 import { finishInto, isAlreadyFinished, dropDuplicateSessions } from './model/finish.js';
 import {
   startLive, toggleSet, updateSet, addSet, removeSet, setSkipped, setNote, setVariant, applyIncreaseTo,
   extendRest, clearRest, restRemaining, summarize, progress, hasAnyDone, restoreLive,
-  activeSlot, isDeferred, setDeferred, canDefer, holdPhase, localDate,
+  activeSlot, isDeferred, setDeferred, canDefer, holdPhase, localDate, setRir,
 } from './model/live.js';
-import { liveView, steppersFor, holdLabel, holdSeconds, lastNoteText } from './views/live.js';
+import { liveView, steppersFor, holdLabel, holdSeconds, lastNoteText, RIR_VALUES, rirText, rirTargetText } from './views/live.js';
 import { unlockAudio, beep, DEFAULT_SOUND } from './sound.js';
 import { historyList, historyDetail } from './views/history.js';
+import { rpeSlider } from './views/rpe.js';
+import { archiveScreen } from './views/archive.js';
 import { planScreen as planView } from './views/plan.js';
 import { infoScreen } from './views/info.js';
 import { buildAgentPrompt, resultLines } from './agent-prompt.js';
 import { readImportFiles, previewImport, applyImports, overlapText } from './model/import.js';
-import { historyCsv } from './model/csv.js';
+import { buildCoachExport, coachExportFileName } from './model/coach-export.js';
 import { fmtClock, fmtSet, fmtDay } from './format.js';
 import * as store from './storage.js';
 import { keepAwake } from './wakelock.js';
@@ -42,7 +46,7 @@ const S = {
   file: null,
   live: null,
   lastExport: null,
-  screen: 'home', // empty | home | hist | plan | live | done
+  screen: 'home', // empty | home | hist | plan | arch | live | done | info
   sheet: null, // () => Node
   toast: null, // { text, action?: {label, run} }
   done: null, // { sessionId, summary, title, week, planCompleted, exported }
@@ -56,6 +60,9 @@ const S = {
   hold: null, // { i, s, liveId, startedAt, sec, perSide, index } laufender Countdown (nur im Speicher)
   warmupOpen: null, // id des Trainings, dessen Warm-up aufgeklappt ist (nur im Speicher)
   scrollToActive: false, // nach dem Wechsel zur Liste einmal zum aktuellen Satz scrollen
+  finishInput: null, // { liveId, rpe, note } Eingaben im Dialog „Training beenden?“ (nur im Speicher)
+  loadProblem: null, // Hinweis beim Start, wenn der gespeicherte Stand nicht passte
+  archive: null, // im Archiv geöffnete Datei (nur im Speicher, nur lesen), siehe views/archive.js
 };
 
 // Ansagen für Screenreader: eine dauerhafte Live-Region außerhalb von #app.
@@ -225,7 +232,7 @@ function menuButton() {
 }
 
 function tabs() {
-  const items = [['home', 'Heute'], ['hist', 'Verlauf'], ['plan', 'Plan']];
+  const items = [['home', 'Heute'], ['hist', 'Verlauf'], ['plan', 'Plan'], ['arch', 'Archiv']];
   return h('nav', { class: 'tabs', 'aria-label': 'Hauptnavigation' },
     items.map(([k, label]) => h('button', { 'aria-current': S.screen === k ? 'page' : false, 'data-fid': `tab-${k}`, onclick: () => go(k) }, label)));
 }
@@ -314,31 +321,35 @@ function emptyScreen() {
     h('div', { class: 'stack onboard-actions' },
       h('button', { class: 'btn', 'data-fid': 'open', onclick: openFiles }, 'Plan öffnen'),
       h('button', { class: 'btn ghost', 'data-fid': 'create', onclick: () => openSheet(() => agentSheet('Neuen Plan erstellen')) }, 'Neuen Plan erstellen'),
+      h('button', { class: 'link', 'data-fid': 'empty-archive', onclick: () => go('arch') }, 'Ältere Datei im Archiv ansehen'),
       h('p', { class: 'mut small' }, 'Pläne sind keine medizinische Beratung. Bei Beschwerden bitte ärztlich oder physiotherapeutisch abklären.')),
   ];
 }
 
 // ---------- Plan mit KI ----------
 
+/** Text in die Zwischenablage. Geht das nicht, wird der angezeigte Text (pre.prompt im Sheet) markiert. */
+async function copyText(text, okText) {
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast(okText);
+  } catch {
+    const pre = root.querySelector('.sheet .prompt');
+    if (pre) {
+      const r = document.createRange();
+      r.selectNodeContents(pre);
+      const sel = getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+    showToast('Kopieren nicht möglich. Text ist markiert, bitte manuell kopieren.');
+  }
+}
+
 function agentSheet(title) {
   const plain = buildAgentPrompt();
   const results = S.file ? resultLines(S.file) : [];
-  const copy = async (text) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      showToast('Prompt kopiert.');
-    } catch {
-      const pre = root.querySelector('.prompt');
-      if (pre) {
-        const r = document.createRange();
-        r.selectNodeContents(pre);
-        const sel = getSelection();
-        sel.removeAllRanges();
-        sel.addRange(r);
-      }
-      showToast('Kopieren nicht möglich. Text ist markiert, bitte manuell kopieren.');
-    }
-  };
+  const copy = (text) => copyText(text, 'Prompt kopiert.');
   const share = async (text) => {
     try {
       if (!navigator.share) throw new Error('kein Teilen');
@@ -361,6 +372,27 @@ function agentSheet(title) {
     h('button', { class: 'btn ghost', onclick: closeSheet }, 'Schließen'));
 }
 
+// ---------- Export für Coach ----------
+
+/** Schlanker Text mit Plan und allen Trainings dieser Trainingsdatei für einen KI-Coach (siehe model/coach-export.js). */
+function coachSheet(file = S.file) {
+  const text = buildCoachExport(file);
+  const name = coachExportFileName(file);
+  const share = async () => {
+    const res = await shareOrDownload(new Blob([text], { type: 'text/markdown' }), name, 'text/markdown');
+    if (res.ok) showToast(res.method === 'share' ? 'Export für Coach geteilt.' : 'Export für Coach heruntergeladen.');
+  };
+  return sheetFrame('Export für Coach',
+    h('p', { class: 'mut' }, 'Plan und alle Trainings dieser Trainingsdatei als schlanker Text für deinen KI-Coach. Ohne technische Felder, neuestes Training zuerst.'),
+    h('p', { class: 'mut small' }, 'Was du dem KI-Dienst gibst, geht an dessen Anbieter, auch deine Notizen. Die Rückmeldungen sind keine medizinische Beratung.'),
+    h('pre', { class: 'prompt', tabindex: '0', 'aria-label': 'Export für Coach' }, text),
+    h('div', { class: 'row2' },
+      h('button', { class: 'btn sm grow-btn', 'data-fid': 'coach-share', onclick: share }, 'Teilen'),
+      h('button', { class: 'btn ghost sm grow-btn', 'data-fid': 'coach-copy', onclick: () => copyText(text, 'Export für Coach kopiert.') }, 'Kopieren')),
+    h('p', { class: 'mut small' }, `Teilen als Datei ${name}.`),
+    h('button', { class: 'btn ghost', onclick: closeSheet }, 'Schließen'));
+}
+
 // ---------- Import ----------
 
 function openFiles() {
@@ -377,6 +409,27 @@ function openFiles() {
       const r = await readImportFiles(files);
       if (!r.ok) {
         openSheet(() => importErrorSheet(r.errors));
+        return;
+      }
+      // Eine Trainingsdatei, die als ältere (nicht aktive) Datei noch im Browser liegt: zusammenführen statt ersetzen.
+      for (const item of r.items) {
+        if (item.kind !== 'training' || item.file.fileId === S.file?.fileId) continue;
+        const raw = await store.getFile(item.file.fileId).catch(() => null);
+        if (!raw) continue;
+        let stored;
+        try {
+          stored = validateTrainingFile(dropDuplicateSessions(raw).file);
+        } catch {
+          continue;
+        }
+        const m = mergeWithStored(stored, item.file);
+        item.file = m.file;
+        item.mergedWithBrowser = !m.sameAsIncoming;
+      }
+      const plans = r.items.filter((i) => i.kind === 'plan').length;
+      if (plans > 1) {
+        // Mehrere Pläne auf einmal ergäben Zwischenstände, die nie gespeichert werden (Review r4 Code-Qualität N1).
+        openSheet(() => importErrorSheet([{ name: `${plans} Pläne`, errors: ['Bitte immer nur einen Plan auf einmal öffnen.'] }]));
         return;
       }
       const preview = previewImport(S.file, r.items);
@@ -409,7 +462,7 @@ function importErrorSheet(errors) {
 const ACTION_TEXT = {
   restore: 'Wird als Trainingsstand übernommen.',
   unchanged: 'Entspricht dem gespeicherten Stand. Nichts zu tun.',
-  new: 'Legt einen neuen Trainingsstand mit leerer Historie an.',
+  new: 'Legt eine neue Trainingsdatei mit leerer Historie an.',
 };
 
 function importPreviewSheet() {
@@ -424,17 +477,18 @@ function importPreviewSheet() {
         : `Der Browser-Stand ist neuer (Stand ${p.localRevision}, Datei ${p.revision}).${p.merge.addedSessions ? ` ${p.merge.addedSessions} Training(s) aus der Datei werden ergänzt.` : ''}`;
       if (p.merge.removedSessions) action += ` ${p.merge.removedSessions} gelöschte(s) Training(s) werden entfernt.`;
     } else if (p.action === 'switch') {
-      action = `Anderer Trainingsstand: Er ersetzt den aktuellen in der App. Der aktuelle bleibt im Browser gespeichert.${unsavedNow ? ' Achtung: Der aktuelle Stand ist noch nicht als Datei gesichert.' : ''}`;
+      action = `Andere Trainingsdatei: Sie ersetzt die aktuelle in der App. Die aktuelle wird danach aus dem Browser entfernt und liegt nur noch in Dateien.${unsavedNow ? ' Sie ist noch nicht gesichert, die App bietet vorher „Als Datei sichern“ an.' : ''}${st.items[idx]?.mergedWithBrowser ? ' Ein älterer Stand dieser Datei lag noch im Browser und wird mit ihr zusammengeführt.' : ''}`;
     } else if (p.action === 'choose') {
       const choice = st.choices[idx] ?? p.defaultChoice;
+      const leave = ` Die bisherige Trainingsdatei wird danach aus dem Browser entfernt und liegt nur noch in Dateien${unsavedNow ? ' (die App bietet vorher „Als Datei sichern“ an)' : ''}.`;
       const text = {
-        keep: `Der laufende Plan wird angepasst, du bleibst in Woche ${p.currentWeek}. Deine ${p.historyCount} Trainings bleiben und werden über die Übungs-IDs zugeordnet.`,
-        cycle: `Neuer Durchgang ab Woche 1. Deine ${p.historyCount} Trainings bleiben, die Gewichte werden daraus vorgeschlagen.`,
-        new: 'Neuer Trainingsstand mit leerer Historie. Der bisherige bleibt im Browser gespeichert.',
+        keep: `Gleiche Trainingsdatei: Der Plan wird ersetzt, du bleibst in Woche ${p.currentWeek}. Deine ${p.historyCount} Trainings bleiben unverändert.`,
+        successor: `Nächster Durchgang in einer neuen Trainingsdatei ab Woche 1, mit Verweis auf die bisherige. Die letzten Gewichte werden als Startwerte übernommen.${leave}`,
+        new: `Neue Trainingsdatei ab Woche 1, ohne Verweis und ohne Startwerte.${leave}`,
       };
       const overlap = choice === 'new' ? null : overlapText(p.overlap);
       action = h('div', { class: 'stack' },
-        seg([['keep', 'Anpassen'], ['cycle', 'Von vorn'], ['new', 'Ganz neu']], choice, (v) => { st.choices[idx] = v; render(); }, `Neuer Plan ${idx + 1}`),
+        seg([['keep', 'Anpassen'], ['successor', 'Nachfolger'], ['new', 'Ganz neu']], choice, (v) => { st.choices[idx] = v; render(); }, `Neuer Plan ${idx + 1}`),
         h('p', { class: 'mut small' }, text[choice]),
         overlap ? h('p', { class: 'mut small', 'data-fid': `overlap-${idx}` }, overlap) : null);
     } else action = ACTION_TEXT[p.action];
@@ -469,20 +523,73 @@ async function confirmImport() {
     showToast(`Nicht übernommen: ${problem}`, null, 10000);
     return;
   }
-  const fromFile = st.items.some((i) => i.kind === 'training' && i.file.fileId === file.fileId && i.file.revision === file.revision);
+  const fromFile = st.items.some((i) => i.kind === 'training' && !i.mergedWithBrowser && i.file.fileId === file.fileId && i.file.revision === file.revision);
   const exportRec = fromFile ? { revision: file.revision, at: now.toISOString(), method: 'import' } : null;
+  // Wechsel auf eine andere Trainingsdatei: Die bisherige muss vorher gesichert sein, danach verlässt sie den Browser.
+  await withBackupFirst(() => switchToFile(file, exportRec, notes.length ? `Übernommen. ${notes.join(' ')}` : 'Übernommen.', notes.length ? 8000 : 3000), file);
+}
+
+/**
+ * Ab 2.0 liegt nur die aktive Trainingsdatei im Browser. Wird eine andere aktiv (Nachfolger, Ganz neu, Plan erneut starten,
+ * andere .training.json), muss die bisherige gesichert sein. Ist sie es nicht, kommt zuerst „Erst sichern“.
+ * Abbrechen bricht den Wechsel ab. next: neue Datei (bei gleicher fileId kein Wechsel). Entscheidung: model/switch.js.
+ */
+async function withBackupFirst(proceed, next) {
+  if (!needsBackupFirst(S.file, S.lastExport, next)) return proceed();
+  openSheet(() => sheetFrame('Erst sichern',
+    h('p', {}, `Die bisherige Trainingsdatei „${S.file.plan.name}“ ist noch nicht als Datei gesichert.`),
+    h('p', { class: 'mut small' }, 'Nach dem Wechsel liegt sie nicht mehr im Browser, sondern nur noch in Dateien. Im Teilen-Menü „In Dateien sichern“ wählen, bei Rückfrage „Ersetzen“.'),
+    h('button', { class: 'btn', 'data-fid': 'backup-first', onclick: async () => {
+      const method = await doExport();
+      if (!method) return;
+      if (method === 'download') confirmDownloaded(fileNameOf(S.file), proceed);
+      else await proceed();
+    } }, 'Als Datei sichern und weiter'),
+    h('button', { class: 'btn ghost', 'data-fid': 'backup-cancel', onclick: () => { S.importState = null; closeSheet(); } }, 'Abbrechen')));
+  return undefined;
+}
+
+/**
+ * Nach einer Sicherung per Download weiß die App nicht, ob die Datei wirklich angekommen ist. Bevor die bisherige Datei den
+ * Browser verlässt, fragt sie nach (Betreiber, Review r4 Security N1 und iOS M-6).
+ */
+function confirmDownloaded(name, proceed) {
+  openSheet(() => sheetFrame('Datei gesichert?',
+    h('p', {}, `Liegt „${name}“ jetzt in Dateien bzw. im Download-Ordner?`),
+    h('p', { class: 'mut small' }, 'Danach wird die bisherige Trainingsdatei aus dem Browser entfernt.'),
+    h('button', { class: 'btn', 'data-fid': 'download-ok', onclick: () => proceed() }, 'Ja, weiter'),
+    h('button', { class: 'btn ghost', 'data-fid': 'download-cancel', onclick: () => { S.importState = null; closeSheet(); } }, 'Abbrechen')));
+}
+
+/**
+ * Neue aktive Trainingsdatei speichern; eine bisherige mit anderer fileId verlässt dabei den Browserspeicher.
+ * Läuft über die Speicher-Warteschlange. Beim Wechsel schreibt storage.saveImported nur, wenn kein anderes Fenster
+ * inzwischen Neueres gespeichert hat (sonst StaleError mit Hinweis „neu laden“).
+ */
+async function switchToFile(file, exportRec, toastText, ms = 3000) {
+  const problem = checkReimport(file);
+  if (problem) {
+    showToast(`Nicht übernommen: ${problem}`, null, 10000);
+    return;
+  }
+  const dropFileId = isSwitch(S.file, file) ? S.file.fileId : null;
+  const expectRevision = dropFileId ? S.file.revision : null;
+  let saved = false;
+  await queueSave(async () => {
+    await store.saveImported(file, exportRec, { dropFileId, expectRevision });
+    saved = true;
+  });
+  if (!saved) return;
   try {
-    await saveChain;
-    await store.saveImported(file, exportRec);
     S.lastExport = exportRec ?? (await store.getLastExport(file.fileId));
   } catch (e) {
-    showStorageError(e);
-    return;
+    console.error(e);
+    S.lastExport = exportRec ?? null;
   }
   S.file = file;
   S.importState = null;
   go('home');
-  showToast(notes.length ? `Übernommen. ${notes.join(' ')}` : 'Übernommen.', null, notes.length ? 8000 : 3000);
+  showToast(toastText, null, ms);
 }
 
 // ---------- Plan-Tab ----------
@@ -504,15 +611,7 @@ const PA = {
   openFiles: () => openFiles(),
   agentPrompt: () => openSheet(() => agentSheet('Plan mit KI erstellen oder anpassen')),
   exportAll: () => doExport(),
-  async exportCsv() {
-    if (!S.file.sessions.some((s) => s.endedAt)) {
-      showToast('Noch keine Trainings für den CSV-Export.');
-      return;
-    }
-    const name = trainingFileName(S.file.plan.name).replace(/\.training\.json$/, '-verlauf.csv');
-    const res = await shareOrDownload(new Blob([historyCsv(S.file)], { type: 'text/csv' }), name, 'text/csv');
-    if (res.ok) showToast(res.method === 'share' ? 'CSV geteilt.' : 'CSV heruntergeladen.');
-  },
+  coachExport: () => openSheet(coachSheet),
 };
 
 function blockedByLive() {
@@ -524,8 +623,12 @@ function blockedByLive() {
 function askRestartPlan() {
   if (blockedByLive()) return;
   openSheet(() => sheetFrame('Plan erneut starten?',
-    h('p', { class: 'mut' }, `„${S.file.plan.name}“ beginnt als Durchgang ${cycleOf(S.file.progress) + 1} wieder in Woche 1. Dein Verlauf bleibt erhalten, die Gewichte werden daraus vorgeschlagen.`),
-    h('button', { class: 'btn', 'data-fid': 'restart-ok', onclick: () => { S.sheet = null; setFile(startNewCycle(S.file)); showToast('Plan neu gestartet: Woche 1.'); } }, 'Erneut starten'),
+    h('p', { class: 'mut' }, `„${S.file.plan.name}“ beginnt als nächster Durchgang wieder in Woche 1, in einer neuen Trainingsdatei mit Verweis auf die bisherige. Die letzten Gewichte werden als Startwerte übernommen.`),
+    h('p', { class: 'mut small' }, 'Die bisherige Trainingsdatei wird danach aus dem Browser entfernt und liegt nur noch in Dateien.'),
+    h('button', { class: 'btn', 'data-fid': 'restart-ok', onclick: () => {
+      const next = createSuccessorFile(S.file, S.file.plan);
+      withBackupFirst(() => switchToFile(next, null, 'Plan neu gestartet: Woche 1, neue Trainingsdatei.'), next);
+    } }, 'Erneut starten'),
     h('button', { class: 'btn ghost', onclick: closeSheet }, 'Abbrechen')));
 }
 
@@ -618,6 +721,9 @@ const HA = {
   },
   editSet: (bi, si) => openSheet(() => histSetSheet(bi, si)),
   editNote: (bi) => openSheet(() => histNoteSheet(bi)),
+  editRir: (bi) => openSheet(() => histRirSheet(bi)),
+  editRpe: () => openSheet(histRpeSheet),
+  editSessionNote: () => openSheet(histSessionNoteSheet),
   askDelete: (id) => openSheet(() => deleteSessionSheet(id)),
 };
 
@@ -649,7 +755,7 @@ function histSetSheet(bi, si) {
   const set = block?.sets[si];
   if (!set) return null;
   const names = nameIndex(S.file.plan);
-  const item = { name: names.exercise(block.exerciseId), unit: loggedUnit(names.unit(block.exerciseId), block), perSide: names.perSide(block.exerciseId) };
+  const item = { name: names.blockExercise(block), unit: loggedUnit(names.unit(block.exerciseId), block), perSide: names.perSide(block.exerciseId) };
   return sheetFrame(`${item.name} · Satz ${si + 1}`,
     h('p', { class: 'mut small' }, `${fmtDay(sess.date)} · Aktuell: ${fmtSet(item, set)}${set.done ? '' : ' (nicht erledigt)'}`),
     steppersFor(item, set, bi, si, HE),
@@ -660,7 +766,7 @@ function histNoteSheet(bi) {
   const sess = histSession();
   const block = sess?.blocks[bi];
   if (!block) return null;
-  const name = nameIndex(S.file.plan).exercise(block.exerciseId);
+  const name = nameIndex(S.file.plan).blockExercise(block);
   const save = () => {
     const el = root.querySelector('#hist-note');
     S.sheet = null;
@@ -669,6 +775,49 @@ function histNoteSheet(bi) {
   return sheetFrame(`Notiz · ${name}`,
     h('label', { class: 'field', for: 'hist-note' }, h('span', { class: 'mut' }, 'Notiz zur Übung'),
       h('textarea', { id: 'hist-note', 'data-fid': 'hist-note', maxlength: 2000, rows: 4, value: block.note })),
+    h('button', { class: 'btn', onclick: save }, 'Speichern'),
+    h('button', { class: 'btn ghost', onclick: closeSheet }, 'Abbrechen'));
+}
+
+function histRirSheet(bi) {
+  const sess = histSession();
+  const block = sess?.blocks[bi];
+  if (!block) return null;
+  const names = nameIndex(S.file.plan);
+  const value = block.rirLast ?? null;
+  const target = rirTargetText(S.file.plan.rirTargets?.[String(sess.week)]);
+  const pick = (v) => saveFileQuiet(setLoggedRir(S.file, sess.id, bi, v === value ? null : v));
+  return sheetFrame(`RIR · ${names.blockExercise(block)}`,
+    h('p', { class: 'mut small' }, `Wie viele Wiederholungen wären nach dem letzten Satz noch gegangen?${target ? ` Ziel in Woche ${sess.week}: ${target}.` : ''}`),
+    h('div', { class: 'chips rir-chips', role: 'group', 'aria-label': 'RIR nach dem letzten Satz' },
+      RIR_VALUES.map((v) => h('button', {
+        'aria-pressed': value === v, 'data-fid': `hrir-${v}`, onclick: () => { pick(v); render(); },
+      }, rirText(v)))),
+    h('p', { class: 'mut small' }, 'Ein Tap auf den gewählten Wert entfernt ihn.'),
+    h('button', { class: 'btn', onclick: closeSheet }, 'Fertig'));
+}
+
+function histRpeSheet() {
+  const sess = histSession();
+  if (!sess) return null;
+  return sheetFrame('RPE des Trainings',
+    h('p', { class: 'mut small' }, 'Wie hart war das Training insgesamt?'),
+    // Kein Neuzeichnen beim Wählen (Review r4 iOS M-4); die Detailansicht aktualisiert sich beim Schließen.
+    rpeSlider({ value: sess.rpe ?? null, onPick: (v) => saveFileQuiet(setSessionRpe(S.file, sess.id, v)), fid: 'hrpe' }),
+    h('button', { class: 'btn', onclick: closeSheet }, 'Fertig'));
+}
+
+function histSessionNoteSheet() {
+  const sess = histSession();
+  if (!sess) return null;
+  const save = () => {
+    const el = root.querySelector('#hist-session-note');
+    S.sheet = null;
+    setFile(setSessionNote(S.file, sess.id, el ? el.value : sess.note ?? ''));
+  };
+  return sheetFrame('Notiz zum Training',
+    h('label', { class: 'field', for: 'hist-session-note' }, h('span', { class: 'mut' }, 'Notiz zum ganzen Training'),
+      h('textarea', { id: 'hist-session-note', 'data-fid': 'hist-session-note', maxlength: 2000, rows: 4, value: sess.note ?? '' })),
     h('button', { class: 'btn', onclick: save }, 'Speichern'),
     h('button', { class: 'btn ghost', onclick: closeSheet }, 'Abbrechen'));
 }
@@ -720,6 +869,7 @@ function askDiscard() {
 }
 
 async function discardLive() {
+  S.finishInput = null;
   S.live = null;
   S.hold = null;
   S.sheet = null;
@@ -841,7 +991,19 @@ const A = {
     closeSheet();
     announce(later ? `${S.live.items[i].name} kommt später` : `${S.live.items[i].name} wieder in der Reihenfolge`);
   },
+  /** RIR nach dem letzten Satz setzen. Ein Tap auf den gewählten Wert nimmt ihn wieder heraus. */
+  rir(i, v) {
+    if (!S.live) return;
+    const current = S.live.session.blocks[i]?.rirLast ?? null;
+    const next = setRir(S.live, i, current === v ? null : v);
+    if (next === S.live) return;
+    const name = S.live.items[i].name;
+    announce(current === v ? `RIR ${name} entfernt` : `RIR ${name}: ${rirText(v)}`);
+    setLive(next);
+  },
   askFinish() {
+    // Eingaben bleiben, bis das Training gespeichert oder verworfen ist (ein Tap neben das Sheet verwirft nichts, iOS N-1).
+    if (S.finishInput?.liveId !== S.live.session.id) S.finishInput = { liveId: S.live.session.id, rpe: null, note: '' };
     openSheet(finishSheet);
   },
 };
@@ -900,7 +1062,16 @@ function finishSheet() {
     h('p', { class: 'mut' }, `${p.done} von ${p.total} Sätzen erledigt.`),
     p.done < p.total && any ? h('p', { class: 'mut small' }, 'Offene Sätze werden als nicht erledigt gespeichert.') : null,
     any && !counts ? h('p', { class: 'mut small' }, `Nur ${share.done} von ${share.total} geplanten Sätzen erledigt (übersprungene Übungen zählen mit), also weniger als die Hälfte: Das Training wird gespeichert, die Einheit bleibt in dieser Woche aber offen.`) : null,
-    any ? h('button', { class: 'btn', onclick: finishLiveNow }, 'Beenden und speichern') : h('p', { class: 'mut small' }, 'Noch kein Satz erledigt, es gibt nichts zu speichern.'),
+    any ? h('div', { class: 'stack' },
+      h('p', { class: 'small' }, h('b', {}, 'Wie hart war das Training insgesamt?'), h('span', { class: 'mut' }, ' Optional.')),
+      rpeSlider({ value: S.finishInput?.rpe ?? null, onPick: (v) => { S.finishInput = { ...S.finishInput, rpe: v }; }, fid: 'rpe' }),
+      h('label', { class: 'field', for: 'finish-note' }, h('span', { class: 'mut' }, 'Notiz zum Training (optional)'),
+        h('textarea', {
+          id: 'finish-note', 'data-fid': 'finish-note', maxlength: 2000, rows: 2, value: S.finishInput?.note ?? '',
+          // Nur merken, nicht neu zeichnen: Sonst geht der Tap auf „Beenden und speichern“ verloren.
+          oninput: (e) => { S.finishInput = { ...S.finishInput, note: e.target.value }; },
+        }))) : null,
+    any ? h('button', { class: 'btn', 'data-fid': 'finish-save', onclick: finishLiveNow }, 'Beenden und speichern') : h('p', { class: 'mut small' }, 'Noch kein Satz erledigt, es gibt nichts zu speichern.'),
     h('button', { class: 'btn ghost', onclick: closeSheet }, 'Weiter trainieren'),
     h('button', { class: 'btn danger', onclick: askDiscard }, 'Training verwerfen'));
 }
@@ -913,7 +1084,8 @@ async function finishLiveNow() {
   const now = new Date();
   const live = S.live;
   const summary = summarize(live, now);
-  const { file, session, progress: prog } = finishInto(S.file, live, now);
+  const { file, session, progress: prog } = finishInto(S.file, live, now, S.finishInput ?? {});
+  S.finishInput = null;
   // Sofort umschalten, damit kein späteres Speichern (App verlassen, Pausenende) das beendete Training wieder als laufend ablegt.
   S.live = null;
   S.file = file;
@@ -954,7 +1126,7 @@ function doneScreen() {
       h('p', { class: 'mut' }, `Alle ${S.file.plan.weeks} Wochen geschafft. Sichere den Stand jetzt als Archiv.`)) : null,
     h('section', { class: 'card', 'aria-label': 'Export' },
       h('h3', {}, 'Als Datei sichern'),
-      h('p', { class: 'mut small' }, trainingFileName(S.file.plan.name)),
+      h('p', { class: 'mut small' }, fileNameOf(S.file)),
       h('p', { class: 'mut small' }, 'Im Teilen-Menü „In Dateien sichern“ wählen, bei Rückfrage „Ersetzen“.'),
       d.exported ? h('p', { class: 'tag' }, 'Gesichert') : null,
       h('button', { class: d.exported ? 'btn ghost' : 'btn', 'data-fid': 'export', onclick: async () => { if (await doExport()) { d.exported = true; render(); } } }, d.exported ? 'Nochmal sichern' : 'Als Datei sichern')),
@@ -992,7 +1164,7 @@ async function doExport() {
     await store.setLastExport(S.file.fileId, rec);
     S.lastExport = rec;
     showToast(res.method === 'share' ? 'Gesichert.' : 'Datei heruntergeladen. Bitte prüfen, ob sie in „Dateien“ bzw. im Download-Ordner liegt.', null, res.method === 'share' ? 4000 : 7000);
-    return true;
+    return res.method;
   } catch (e) {
     console.error(e);
     showToast('Export fehlgeschlagen. Bitte erneut versuchen.');
@@ -1000,11 +1172,11 @@ async function doExport() {
   }
 }
 
-async function doGarminExport(sessionId) {
-  const s = S.file.sessions.find((x) => x.id === sessionId);
+async function doGarminExport(sessionId, file = S.file) {
+  const s = file.sessions.find((x) => x.id === sessionId);
   if (!s) return;
   try {
-    const blob = new Blob([sessionToFit(S.file.plan, s)], { type: 'application/vnd.ant.fit' });
+    const blob = new Blob([sessionToFit(file.plan, s)], { type: 'application/vnd.ant.fit' });
     const res = await shareOrDownload(blob, garminFileName(s), 'application/vnd.ant.fit');
     if (!res.ok) {
       if (res.aborted) showToast('Garmin-Export abgebrochen.');
@@ -1019,6 +1191,74 @@ async function doGarminExport(sessionId) {
   }
 }
 
+// ---------- Archiv (nur lesen, nur im Speicher) ----------
+
+/** Datei zum Ansehen wählen. Geprüft wie beim Import, aber nie übernommen oder gespeichert. */
+function openArchiveFile() {
+  const input = h('input', { type: 'file', accept: '.json,application/json', class: 'sr-only', 'aria-hidden': 'true', tabindex: '-1' });
+  input.addEventListener('change', async () => {
+    const files = [...(input.files ?? [])];
+    input.remove();
+    if (!files.length) return;
+    try {
+      const r = await readImportFiles(files.slice(0, 1));
+      if (!r.ok) {
+        openSheet(() => importErrorSheet(r.errors));
+        return;
+      }
+      const item = r.items[0];
+      S.archive = item.kind === 'training'
+        ? { kind: 'training', name: item.name, file: item.file, week: item.file.progress.currentWeek, histId: null, chartExercise: null }
+        : { kind: 'plan', name: item.name, plan: item.plan, week: 1, histId: null, chartExercise: null };
+      S.sheet = null;
+      render();
+      window.scrollTo(0, 0);
+    } catch (e) {
+      console.error(e);
+      showToast('Die Datei konnte nicht geöffnet werden. Bitte erneut versuchen.', null, 8000);
+    }
+  }, { once: true });
+  input.addEventListener('cancel', () => input.remove(), { once: true });
+  document.body.append(input);
+  input.click();
+}
+
+const AR = {
+  open: openArchiveFile,
+  close() {
+    S.archive = null;
+    render();
+  },
+  week(w) {
+    if (!S.archive) return;
+    S.archive = { ...S.archive, week: w };
+    render();
+  },
+  openSession(id) {
+    S.archive = { ...S.archive, histId: id };
+    render();
+    window.scrollTo(0, 0);
+  },
+  back() {
+    const id = S.archive?.histId;
+    S.archive = { ...S.archive, histId: null };
+    render();
+    root.querySelector(`[data-fid="sess-${CSS.escape(id ?? '')}"]`)?.focus();
+  },
+  chartExercise(id) {
+    S.archive = { ...S.archive, chartExercise: id };
+    render();
+  },
+  coachExport: () => { if (S.archive?.kind === 'training') openSheet(() => coachSheet(S.archive.file)); },
+  exportGarmin: (id) => { if (S.archive?.kind === 'training') doGarminExport(id, S.archive.file); },
+};
+
+function archScreen() {
+  const body = archiveScreen(S.archive, S.file?.fileId ?? null, AR);
+  // Ohne aktive Trainingsdatei gibt es keine Tabs: Rückweg zum Start.
+  return S.file ? body : [h('div', {}, h('button', { class: 'link back', 'data-fid': 'arch-start', onclick: () => go('empty') }, '‹ Start')), body];
+}
+
 // ---------- Rendern ----------
 
 const SCREENS = {
@@ -1029,6 +1269,7 @@ const SCREENS = {
   live: () => liveView(S.live, currentView(), A, { undo: S.undo, ready: Date.now() < S.readyUntil, hold: S.hold, warmupOpen: S.warmupOpen === S.live.session.id }),
   done: doneScreen,
   info: () => infoScreen(closeInfo),
+  arch: archScreen,
 };
 
 /** Wenn ein Bildschirm nicht gezeichnet werden kann: sichern, verwerfen oder neu laden statt leerer Seite. */
@@ -1066,7 +1307,7 @@ function render() {
   const nodes = [screen === 'info' ? null : menuButton(), body];
   // Info-Link auf jedem Bildschirm außer im laufenden Training (dort über das Menü, damit der Fokus-Modus ohne Scrollen passt).
   if (screen !== 'live' && screen !== 'info') nodes.push(footerLink());
-  if (['home', 'hist', 'plan'].includes(screen)) nodes.push(tabs());
+  if (['home', 'hist', 'plan', 'arch'].includes(screen) && S.file) nodes.push(tabs());
   if (S.sheet) nodes.push(S.sheet());
   if (S.toast) nodes.push(toastNode());
   root.replaceChildren(...nodes.flat(Infinity).filter(Boolean));
@@ -1223,6 +1464,77 @@ async function boot() {
       showToast(text, { label: 'Sichern', run: () => doExport() }, 7000);
     }
   }
+  if (!S.fatal) cleanUpOtherFiles();
+}
+
+// ---------- Ältere Trainingsdateien im Browser ----------
+
+/**
+ * Ab 2.0 liegt nur die aktive Trainingsdatei im Browser. Ältere (z. B. nach „Ganz neu“ in 1.x) werden entfernt, wenn
+ * ihr Stand gesichert ist. Ungesicherte bietet die App zum Sichern an; sie bleiben, bis sie gesichert oder ausdrücklich
+ * verworfen sind.
+ */
+async function cleanUpOtherFiles() {
+  let groups;
+  try {
+    groups = classifyOtherFiles(await store.listOtherFiles());
+  } catch (e) {
+    console.error(e);
+    return;
+  }
+  for (const id of groups.remove) await queueSave(() => store.deleteFile(id));
+  // Aus einer neueren App-Version: behalten, nicht anbieten (die neuere Version kann sie lesen).
+  const unreadable = groups.unreadable.filter((u) => !u.newer);
+  if ((groups.offer.length || unreadable.length) && !S.sheet && !S.live) openSheet(() => otherFilesSheet(groups.offer, unreadable));
+}
+
+function otherFilesSheet(files, unreadable = []) {
+  const remove = (fileId) => {
+    const rest = files.filter((f) => f.fileId !== fileId);
+    const restBad = unreadable.filter((u) => u.fileId !== fileId);
+    queueSave(() => store.deleteFile(fileId));
+    if (rest.length || restBad.length) openSheet(() => otherFilesSheet(rest, restBad));
+    else closeSheet();
+  };
+  return sheetFrame('Ältere Trainingsdateien im Browser',
+    h('p', { class: 'mut' }, `Ab Version 2.0 liegt nur noch die aktive Trainingsdatei im Browser. ${files.length ? 'Diese älteren sind noch nicht als Datei gesichert:' : 'Diese älteren lassen sich nicht lesen:'}`),
+    files.map((f) => {
+      const n = f.sessions.filter((s) => s.endedAt).length;
+      const fid = f.fileId.slice(0, 8);
+      return h('section', { class: 'card stack', 'aria-label': f.plan.name },
+        h('h3', {}, f.plan.name),
+        h('p', { class: 'mut small' }, `${fileNameOf(f)} · ${n} ${n === 1 ? 'Training' : 'Trainings'}`),
+        h('button', { class: 'btn', 'data-fid': `other-save-${fid}`, onclick: async () => {
+          try {
+            const res = await exportTrainingFile(f);
+            if (!res.ok) {
+              if (res.aborted) showToast('Nicht gesichert: Teilen abgebrochen.');
+              return;
+            }
+            if (res.method === 'download') {
+              confirmDownloaded(fileNameOf(f), () => { remove(f.fileId); showToast(`„${f.plan.name}“ aus dem Browser entfernt.`); });
+              return;
+            }
+          } catch (e) {
+            console.error(e);
+            showToast('Export fehlgeschlagen. Bitte erneut versuchen.');
+            return;
+          }
+          remove(f.fileId);
+          showToast(`„${f.plan.name}“ gesichert und aus dem Browser entfernt.`);
+        } }, 'Als Datei sichern'),
+        h('button', { class: 'btn danger', 'data-fid': `other-drop-${fid}`, onclick: () => openSheet(() => sheetFrame('Ohne Sicherung verwerfen?',
+          h('p', {}, `„${f.plan.name}“ mit ${n} ${n === 1 ? 'Training' : 'Trainings'} wird aus dem Browser gelöscht. Ohne Sicherung lässt sich das nicht rückgängig machen.`),
+          h('button', { class: 'btn danger', 'data-fid': 'other-drop-ok', onclick: () => { remove(f.fileId); showToast('Verworfen.'); } }, 'Ja, verwerfen'),
+          h('button', { class: 'btn ghost', onclick: () => openSheet(() => otherFilesSheet(files, unreadable)) }, 'Abbrechen'))) }, 'Verwerfen'));
+    }),
+    // Nicht lesbar (beschädigt): nur verwerfen oder liegen lassen (Review r4 Code-Qualität N7, Security N3).
+    unreadable.map((u) => h('section', { class: 'card stack', 'aria-label': u.name },
+      h('h3', {}, u.name),
+      h('p', { class: 'mut small' }, 'Nicht lesbar (beschädigt). Sie lässt sich nicht als Datei sichern.'),
+      h('button', { class: 'btn danger', 'data-fid': `other-bad-${u.fileId.slice(0, 8)}`, onclick: () => { remove(u.fileId); showToast('Verworfen.'); } }, 'Verwerfen'))),
+    h('button', { class: 'btn ghost', 'data-fid': 'other-later', onclick: closeSheet }, 'Später'),
+    h('p', { class: 'mut small' }, 'Bei „Später“ fragt die App beim nächsten Start wieder.'));
 }
 
 boot();

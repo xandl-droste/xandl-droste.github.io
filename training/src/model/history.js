@@ -11,6 +11,7 @@ export function nameIndex(plan) {
   const variants = new Map();
   const units = new Map();
   const perSide = new Map();
+  const main = new Set();
   const sessions = new Map();
   for (const ps of plan.sessions) {
     sessions.set(ps.key, ps.name);
@@ -18,15 +19,24 @@ export function nameIndex(plan) {
       if (!exercises.has(exercise.id)) exercises.set(exercise.id, exercise.name);
       if (!units.has(exercise.id)) units.set(exercise.id, exercise.unit);
       if (!perSide.has(exercise.id)) perSide.set(exercise.id, Boolean(exercise.perSide));
+      if (exercise.main) main.add(exercise.id);
       for (const v of exercise.variants ?? []) variants.set(`${exercise.id}/${v.id}`, v.name);
     }
   }
   return {
     exercise: (id) => exercises.get(id) ?? id,
     variant: (exId, vId) => (vId ? variants.get(`${exId}/${vId}`) ?? vId : null),
+    /** Name einer Übung in einem Training: der beim Training gespeicherte, sonst aus dem Plan, sonst die id. */
+    blockExercise: (block) => block.name ?? exercises.get(block.exerciseId) ?? block.exerciseId,
+    /** Name der Variante in einem Training: gespeichert, sonst aus dem Plan, ohne Variante null. */
+    blockVariant: (block) => (block.variantId
+      ? block.variantName ?? variants.get(`${block.exerciseId}/${block.variantId}`) ?? block.variantId
+      : null),
     session: (key) => sessions.get(key) ?? key,
     unit: (id) => units.get(id) ?? null,
     perSide: (id) => perSide.get(id) ?? false,
+    /** Hauptübung im aktuellen Plan? */
+    main: (id) => main.has(id),
   };
 }
 
@@ -190,6 +200,40 @@ export function setLoggedNote(file, sessionId, blockIndex, note, now = new Date(
     const text = String(note ?? '').slice(0, LIMITS.maxNote).trim();
     if (!b || b.note === text) return false;
     b.note = text;
+    return true;
+  }, now);
+}
+
+/** RIR nach dem letzten Satz in einem beendeten Training korrigieren (0 bis 4) oder mit null entfernen. */
+export function setLoggedRir(file, sessionId, blockIndex, value, now = new Date()) {
+  if (value !== null && !(Number.isInteger(value) && value >= 0 && value <= LIMITS.maxRir)) return file;
+  return editSession(file, sessionId, (s) => {
+    const b = s.blocks[blockIndex];
+    if (!b || (b.rirLast ?? null) === value) return false;
+    if (value === null) delete b.rirLast;
+    else b.rirLast = value;
+    return true;
+  }, now);
+}
+
+/** RPE eines beendeten Trainings korrigieren (0 bis 10) oder mit null entfernen. */
+export function setSessionRpe(file, sessionId, value, now = new Date()) {
+  if (value !== null && !(Number.isInteger(value) && value >= 0 && value <= LIMITS.maxRpe)) return file;
+  return editSession(file, sessionId, (s) => {
+    if ((s.rpe ?? null) === value) return false;
+    if (value === null) delete s.rpe;
+    else s.rpe = value;
+    return true;
+  }, now);
+}
+
+/** Notiz zum ganzen Training ändern. Leerer Text entfernt sie. */
+export function setSessionNote(file, sessionId, note, now = new Date()) {
+  return editSession(file, sessionId, (s) => {
+    const text = String(note ?? '').slice(0, LIMITS.maxNote).trim();
+    if ((s.note ?? '') === text) return false;
+    if (text) s.note = text;
+    else delete s.note;
     return true;
   }, now);
 }
