@@ -7,10 +7,11 @@ import { bumpRevision } from './training-file.js';
 /**
  * Hängt das beendete Training an die Historie an. Steht dieselbe Session-ID schon drin
  * (z. B. weil ein schon beendetes Training noch einmal als laufend zurückkam), wird sie ersetzt statt doppelt angehängt.
+ * @param {{rpe?: number|null, note?: string}} [extra] RPE und Notiz aus dem Abschluss-Dialog
  * @returns {{ file: object, session: object, progress: object }}
  */
-export function finishInto(file, live, now = new Date()) {
-  const session = finishLive(live, now);
+export function finishInto(file, live, now = new Date(), extra = {}) {
+  const session = finishLive(live, now, extra);
   const exists = file.sessions.some((x) => x.id === session.id);
   const sessions = exists ? file.sessions.map((x) => (x.id === session.id ? session : x)) : [...file.sessions, session];
   let next = { ...file, sessions };

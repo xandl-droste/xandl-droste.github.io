@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validatePlan, validateTrainingFile, LIMITS } from '../training/src/model/validate.js';
+import { validatePlan, validateTrainingFile, LIMITS, SCHEMA_VERSION } from '../training/src/model/validate.js';
 import {
   createTrainingFile, mergeTrainingFiles, replacePlan, summarize, trainingFileName, bumpRevision, themeFor,
 } from '../training/src/model/training-file.js';
@@ -13,7 +13,8 @@ const T1 = new Date('2026-01-02T10:00:00Z');
 
 test('neue Datei hat leere Historie und Standard-Einstellungen', () => {
   const f = createTrainingFile(plan, { now: T0 });
-  assert.equal(f.schemaVersion, 1);
+  assert.equal(f.schemaVersion, SCHEMA_VERSION);
+  assert.equal(f.createdAt, T0.toISOString());
   assert.match(f.fileId, /^[0-9a-f-]{36}$/);
   assert.equal(f.revision, 0);
   assert.deepEqual(f.settings, { theme: 'dark', view: 'list' });

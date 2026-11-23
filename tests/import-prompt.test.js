@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { validatePlan, LIMITS } from '../training/src/model/validate.js';
 import { createTrainingFile, serialize } from '../training/src/model/training-file.js';
 import { readImportFiles, previewImport, applyImports } from '../training/src/model/import.js';
-import { historyCsv, csvField } from '../training/src/model/csv.js';
 import { buildAgentPrompt, EXAMPLE_PLAN } from '../training/src/agent-prompt.js';
 import { planRaw, planText, session, block } from './helpers.js';
 
@@ -74,22 +73,6 @@ test('Import anderer fileId: Wechsel; Plan bei vorhandenem Stand: Wahl Historie 
   assert.equal(local.sessions.length, 1, 'Eingabe unverändert');
 });
 
-test('CSV: Kopfzeile, Dezimalkomma, Formel-Injektion und Trennzeichen', () => {
-  assert.equal(csvField(82.5), '82,5');
-  assert.equal(csvField('=HYPERLINK("x")'), `"'=HYPERLINK(""x"")"`);
-  assert.equal(csvField('a;b'), '"a;b"');
-  assert.equal(csvField('-5'), `"'-5"`);
-  // Review r3 Security N2: Text immer gequotet, damit auch ein Komma-Parser keine Formel an den Zellenanfang bekommt.
-  assert.equal(csvField('Squat,=1+1'), '"Squat,=1+1"');
-  assert.equal(csvField('Kniebeuge'), '"Kniebeuge"');
-  assert.equal(csvField(null), '');
-  const f = { ...createTrainingFile(plan), sessions: [session({ blocks: [block('back-squat', [[82.5, 5], [85, 3, false]], { note: 'Knie;gut' })] })] };
-  const lines = historyCsv(f).replace('﻿', '').trim().split('\r\n');
-  assert.equal(lines[0], 'Datum;Einheit;Woche;Übung;Variante;Satz;kg;Wdh;Sekunden;erledigt;übersprungen;Notiz');
-  assert.equal(lines[1], '"2026-01-01";"Einheit 1 – schwer";1;"Back Squat";;1;82,5;5;;"ja";"nein";"Knie;gut"');
-  assert.equal(lines[2], '"2026-01-01";"Einheit 1 – schwer";1;"Back Squat";;2;85;3;;"nein";"nein";');
-});
-
 test('Agent-Prompt: Beispieldatei besteht den Validator und deckt alle Fälle ab', () => {
   const p = validatePlan(structuredClone(EXAMPLE_PLAN));
   const all = p.sessions.flatMap((s) => s.blocks);
@@ -99,6 +82,8 @@ test('Agent-Prompt: Beispieldatei besteht den Validator und deckt alle Fälle ab
   assert.ok(exs.some((e) => e.unit === 's'), 'Haltezeit');
   assert.ok(exs.some((e) => e.variants?.length), 'Variante');
   assert.ok(exs.some((e) => e.byWeek && Object.keys(e.byWeek).length), 'byWeek');
+  assert.ok(exs.some((e) => e.main === true), 'Hauptübung');
+  assert.ok(exs.some((e) => !e.main), 'nicht jede Übung ist Hauptübung');
   const text = buildAgentPrompt();
   assert.match(text, /ZUERST/);
   assert.match(text, /genau EINE gültige JSON-Datei namens plan\.json/i);
@@ -124,6 +109,7 @@ test('Agent-Prompt nennt die Grenzen und Formate, die der Validator prüft', asy
   }
   assert.match(SCHEMA_TEXT, /variants:[^\n]*Kleinbuchstaben, Ziffern und -/);
   assert.match(SCHEMA_TEXT, /Innerhalb einer Einheit darf jede id nur einmal vorkommen/);
+  assert.match(SCHEMA_TEXT, /- main: optional, true = Hauptübung\. Nach dem letzten Satz[^\n]*RIR[^\n]*Nur für die wichtigsten Übungen/);
 
   const base = () => structuredClone(EXAMPLE_PLAN);
   const firstEx = (p) => p.sessions[0].blocks[0].exercises[0];
@@ -136,6 +122,7 @@ test('Agent-Prompt nennt die Grenzen und Formate, die der Validator prüft', asy
   rejects((p) => { firstEx(p).variants = Array.from({ length: LIMITS.maxVariants + 1 }, (_, i) => ({ id: `v${i}`, name: `V${i}` })); }, 'zu viele Varianten');
   rejects((p) => { p.sessions[0].blocks.push(structuredClone(p.sessions[0].blocks[0])); }, 'gleiche id zweimal in einer Einheit');
   rejects((p) => { p.rirTargets = { [p.weeks + 1]: '2' }; }, 'RIR für eine Woche nach dem Plan');
+  rejects((p) => { firstEx(p).main = 'ja'; }, 'main kein Wahrheitswert');
 });
 
 test('Garmin: unbekannte garminCategory wird nicht exportiert, sondern per Stichwort oder als unbekannt', async () => {

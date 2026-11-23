@@ -2,19 +2,21 @@
 
 import { parseImportText, ValidationError, LIMITS } from './validate.js';
 import { createTrainingFile, mergeTrainingFiles, replacePlan, summarize } from './training-file.js';
-import { startNewCycle, withDerivedProgress, cycleOf } from './weeks.js';
+import { withDerivedProgress, cycleOf } from './weeks.js';
 import { allExerciseIds } from './plan.js';
+import { createSuccessorFile } from './carry-over.js';
 
 /**
- * Wahl für einen Plan bei vorhandenem Stand:
- * 'keep' laufenden Plan anpassen (gleicher Durchgang, gleiche Woche), 'cycle' neuer Durchgang ab Woche 1
- * (Historie bleibt), 'new' neu beginnen mit leerer Historie.
+ * Wahl für einen Plan bei vorhandener Trainingsdatei (ab 2.0 eine Trainingsdatei pro Durchgang):
+ * 'keep' Anpassen: gleiche Trainingsdatei, Plan ersetzt, gleiche Woche, erledigte Trainings bleiben.
+ * 'successor' Nachfolger: neue Trainingsdatei ab Woche 1 mit Verweis auf die bisherige und Startwerten daraus.
+ * 'new' Ganz neu: neue Trainingsdatei ohne Verweis und ohne Startwerte.
  */
-export const PLAN_CHOICES = ['keep', 'cycle', 'new'];
+export const PLAN_CHOICES = ['keep', 'successor', 'new'];
 
-/** Vorbelegung: nach abgeschlossenem Plan ein neuer Durchgang, sonst den laufenden Plan anpassen. */
+/** Vorbelegung: nach abgeschlossenem Plan ein Nachfolger, sonst den laufenden Plan anpassen. */
 export function defaultPlanChoice(active) {
-  return active?.progress.status === 'completed' ? 'cycle' : 'keep';
+  return active?.progress.status === 'completed' ? 'successor' : 'keep';
 }
 
 /**
@@ -116,7 +118,7 @@ export function previewImport(current, items) {
  * Wendet alle Importe an und liefert den neuen aktiven Stand. Rein, ohne Speichern.
  * @param {object|null} current aktueller Stand
  * @param {object[]} items aus readImportFiles
- * @param {Record<number, 'keep'|'cycle'|'new'>} choices Wahl für Pläne (Index in items)
+ * @param {Record<number, 'keep'|'successor'|'new'>} choices Wahl für Pläne (Index in items)
  * Danach wird der Fortschritt aus der Historie abgeleitet (ohne Dialog „Plan abgeschlossen“).
  */
 export function applyImports(current, items, choices = {}, { now = new Date(), settings } = {}) {
@@ -136,10 +138,12 @@ export function applyImports(current, items, choices = {}, { now = new Date(), s
     }
     const picked = choices[idx];
     const choice = active ? (PLAN_CHOICES.includes(picked) ? picked : defaultPlanChoice(active)) : 'new';
-    if (choice === 'keep' || choice === 'cycle') {
+    if (choice === 'keep') {
       const r = replacePlan(active, item.plan, now);
-      active = choice === 'cycle' ? startNewCycle(r.file, now) : r.file;
+      active = r.file;
       if (r.unmatchedExerciseIds.length) notes.push(`Im neuen Plan fehlen Übungen aus der Historie: ${r.unmatchedExerciseIds.join(', ')}. Ihre Einträge bleiben erhalten.`);
+    } else if (choice === 'successor') {
+      active = createSuccessorFile(active, item.plan, { now });
     } else {
       active = createTrainingFile(item.plan, { now, settings: settings ?? active?.settings });
     }

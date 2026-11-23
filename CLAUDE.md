@@ -41,3 +41,13 @@ Die Trainings-PWA liegt im Unterordner `training/` und läuft unter `https://xan
 - Importierte Daten und Nutzereingaben nie mit `innerHTML`, `insertAdjacentHTML`, `eval` oder `new Function` rendern bzw. ausführen.
 - Keine externen Requests, keine CDNs.
 - Die vollständige Spezifikation steht in `docs/spezifikation.md`.
+
+## Arbeitsstand
+
+- Sitzungen laufen oft in der Cloud und können jederzeit neu starten. Nichts Wichtiges nur im Gespräch oder in der Arbeitskopie lassen.
+- Nach jedem Teilschritt committen und pushen. Den Arbeitsstand (was erledigt ist, was als Nächstes kommt, offene Fragen, selbst getroffene Entscheidungen) in `docs/stand.md` nachführen.
+- Zu Beginn einer Sitzung zuerst `docs/stand.md` lesen.
+
+## Begriffe
+
+- Verbindliche Begriffe stehen in `docs/begriffe.md` (z. B. Plan, Einheit, Training, Trainingsdatei, Durchgang). In Doku, UI-Texten, Code-Kommentaren und Gesprächen nur diese Begriffe verwenden. Neue Begriffe dort eintragen, bevor sie verwendet werden.

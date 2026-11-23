@@ -6,13 +6,13 @@ Baue eine leichtgewichtige PWA, mit der ich meinen Krafttrainingsplan Einheit f�
 
 Die App macht genau eines: den geplanten Trainingsplan abarbeitbar machen und die Ergebnisse speichern.
 
-**Nicht-Ziele (bitte nicht einbauen):** keine Sonderlogik für Körperwerte, kein Tracking einzelner Übungen außerhalb der Sätze, keine Gesundheits- oder Gefühlsabfragen, kein Backend, keine Accounts, kein Auto-Sync.
+**Nicht-Ziele (bitte nicht einbauen):** keine Sonderlogik für Körperwerte, kein Tracking einzelner Übungen außerhalb der Sätze, keine Gesundheits- oder Gefühlsabfragen (Ausnahmen ab 2.0, beide freiwillig: RIR nach dem letzten Satz einer Hauptübung und RPE des ganzen Trainings), kein Backend, keine Accounts, kein Auto-Sync.
 
 **Visuelle Vorlage:** Unter `docs/prototyp.html` liegt ein klickbarer Prototyp. Er zeigt Layout, Ablauf, den Stil-Umschalter und das Menü. Übernimm Aufbau und Look, aber nicht den Code: Der Prototyp nutzt `innerHTML` und Dummy-Daten. Fehlt die Datei, frag mich danach, bevor du mit der UI (Schritt 2) beginnst. Schritt 1 kannst du ohne sie erledigen.
 
-**Begriffe (damit nichts verwechselt wird):**
+**Begriffe (damit nichts verwechselt wird):** Ab Version 2.0 gilt `docs/begriffe.md`. Die folgenden drei Punkte sind der ursprüngliche Stand.
 - *Plan-Einheit* = Vorlage im Plan (`plan.sessions[]`, z. B. `E1`).
-- *Session* = ein tatsächlich absolviertes Training in der Historie (`sessions[]` auf oberster Ebene der Datei).
+- *Training* (früher „Session“) = ein tatsächlich absolviertes Training in der Historie (`sessions[]` auf oberster Ebene der Datei). Verbindliche Begriffe: `docs/begriffe.md`.
 - *Block* = eine einzelne Übung oder ein Superset innerhalb einer Einheit.
 
 **Vorrang bei Widersprüchen:** Abschnitt 1 (harte Rahmenbedingungen) geht vor allem anderen, dann 2 (Datenmodell), dann die übrigen Abschnitte. Findest du einen echten Widerspruch, entscheide dich für die Lesart, die Abschnitt 1 und 2 am besten erfüllt, und nenn ihn im Schrittbericht.
@@ -36,14 +36,18 @@ Die App macht genau eines: den geplanten Trainingsplan abarbeitbar machen und di
 
 ## 2. Datenmodell: eine Datei als Wahrheit
 
-Pro Plan gibt es eine Datei mit festem Namensmuster `<planname>.training.json`. Der Dateiname wird aus dem Plannamen bereinigt erzeugt (nur sichere Zeichen).
+Ab 2.0 gibt es pro Durchgang eines Plans eine Trainingsdatei mit dem Namensmuster `<planname>-<JJJJ-MM-TT>.training.json` (Datum der Anlage, `createdAt`). Der Name wird aus dem Plannamen bereinigt erzeugt (nur sichere Zeichen). Dateien aus 1.x ohne `createdAt` heißen `<planname>.training.json`. Begriffe: `docs/begriffe.md`, Entwurf mit allen Entscheidungen: `docs/entwurf-2.0.md`.
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,      // 1.x-Dateien (1) werden gelesen und als 2 weitergeführt
   "fileId": "UUID",
   "revision": 0,
   "updatedAt": "ISO-8601",
+  "createdAt": "ISO-8601",                                                         // ab 2.0, optional: Anlage der Datei
+  "previous": { "fileId": "UUID", "fileName": "…-2026-09-01.training.json", "planName": "…" },   // optional: Vorgänger
+  "carryOver": [ { "exerciseId": "back-squat", "date": "YYYY-MM-DD", "variantId": null,
+                   "plannedSets": 3, "repsMax": 5, "sets": [ { "kg": 85, "reps": 5, "sec": null } ], "note": "" } ],  // optional: Startwerte
   "plan": { "... siehe Plan-Schema in Abschnitt 3 ..." },
   "settings": { "theme": "dark", "view": "list", "sound": "loud" },   // sound optional: off | quiet | loud, fehlt = loud
   "progress": { "currentWeek": 1, "status": "active", "cycle": 1, "repeatFrom": "ISO-8601" },   // cycle, repeatFrom optional
@@ -57,8 +61,11 @@ Pro Plan gibt es eine Datei mit festem Namensmuster `<planname>.training.json`. 
       "deload": true,      // optional, nur in Deload-Wochen
       "startedAt": "ISO-8601",
       "endedAt": "ISO-8601",
+      "rpe": 7,            // optional (ab 2.0): wie hart war das ganze Training, 0–10
+      "note": "",          // optional (ab 2.0): Notiz zum ganzen Training
       "blocks": [
-        { "exerciseId": "back-squat", "variantId": null,
+        { "exerciseId": "back-squat", "name": "Back Squat", "variantId": null, "variantName": null,   // Namen optional (ab 2.0)
+          "rirLast": 2,    // optional (ab 2.0): RIR nach dem letzten Satz einer Hauptübung, 0–4 (4 = „4+“)
           "plannedSets": 3, "repsMax": 5,   // optional: beim Start gültige Vorgabe (bei Haltezeit durationSec statt repsMax)
           "sets": [ { "kg": 80, "reps": 5, "sec": null, "done": true, "doneAt": "2026-03-05T07:12:40Z" } ],   // doneAt optional
           "note": "" }
@@ -73,11 +80,12 @@ Regeln:
 
 - Plan und Historie sind strukturell getrennt. `plan` gehört dem Agenten und wird von der App nie verändert. `sessions`, `progress` und `settings` gehören der App. Ein neu importierter Plan darf die Historie nicht löschen.
 - IndexedDB ist nur der Arbeitsstand. Bei jedem Trainingsende und bei jeder relevanten Änderung wird `revision` erhöht und `updatedAt` gesetzt.
-- Autosave nach jedem Satz. App-Neustart, Tab-Wechsel oder App-Beenden dürfen die laufende Session nicht verlieren. Eine unterbrochene Session wird beim nächsten Start zum Fortsetzen angeboten.
-- `currentWeek` wird aus den Sessions abgeleitet: Eine Woche ist fertig, wenn alle Plan-Einheiten dieser Woche absolviert sind. Es zählen nur beendete Sessions des aktuellen Durchgangs (`progress.cycle`, fehlt = 1), die nach `progress.repeatFrom` begonnen wurden und bei denen mindestens die Hälfte aller Sätze erledigt ist (Nenner: alle Sätze der Session, auch die übersprungener Übungen). Der Wert kann manuell gesetzt werden. Die Woche rückt nur vor, nie zurück.
-- Durchgänge: „Plan erneut starten“ beginnt einen neuen Durchgang (`cycle + 1`, Woche 1, `status` aktiv, `repeatFrom` entfällt). Die Historie bleibt. „Woche wiederholen“ setzt `repeatFrom` auf jetzt, ältere Sessions zählen dann nicht mehr für den Abschluss.
-- Jede Session speichert beim Start ihren Durchgang, in Deload-Wochen `deload: true` und pro Block die damals gültige Vorgabe (`plannedSets`, `repsMax` bzw. `durationSec`). Ältere Sessions ohne diese Felder: Durchgang 1, Deload und Vorgabe aus dem aktuellen Plan.
-- Beendete Sessions lassen sich im Verlauf korrigieren (Werte, Notiz) und löschen. Gelöschte Session-IDs stehen in `deletedSessionIds` (begrenzt, älteste fallen heraus), damit sie beim Zusammenführen mit älteren Dateien nicht zurückkommen.
+- Autosave nach jedem Satz. App-Neustart, Tab-Wechsel oder App-Beenden dürfen das laufende Training nicht verlieren. Ein unterbrochenes Training wird beim nächsten Start zum Fortsetzen angeboten.
+- `currentWeek` wird aus den Trainings abgeleitet: Eine Woche ist fertig, wenn alle Plan-Einheiten dieser Woche absolviert sind. Es zählen nur beendete Trainings des aktuellen Durchgangs (`progress.cycle`, fehlt = 1), die nach `progress.repeatFrom` begonnen wurden und bei denen mindestens die Hälfte aller Sätze erledigt ist (Nenner: alle Sätze der Training, auch die übersprungener Übungen). Der Wert kann manuell gesetzt werden. Die Woche rückt nur vor, nie zurück.
+- Durchgänge (ab 2.0): Eine Trainingsdatei enthält genau einen Durchgang. „Plan erneut starten“ legt eine neue Trainingsdatei mit demselben Plan an, mit Verweis auf die bisherige (`previous`) und Startwerten daraus (`carryOver`: pro Übung des neuen Plans die letzte Leistung außerhalb eines Deloads mit der damals gültigen Vorgabe). Vorbelegung und Steigerungsvorschlag nutzen die Startwerte, solange es für eine Übung noch kein eigenes Training gibt. Startwerte erscheinen nicht im Verlauf und nicht im Coach-Export. Dateien aus 1.x mit mehreren Durchgängen (`cycle`) bleiben gültig und werden nicht aufgeteilt. „Woche wiederholen“ setzt `repeatFrom` auf jetzt, ältere Trainings zählen dann nicht mehr für den Abschluss.
+- Browserspeicher (ab 2.0): Dort liegt nur die aktive Trainingsdatei (plus laufendes Training und Stand der letzten Sicherung). Bevor eine andere Trainingsdatei aktiv wird (Nachfolger, „Ganz neu“, „Plan erneut starten“, andere `.training.json`), muss die bisherige gesichert sein: Ist sie es nicht, kommt zuerst „Erst sichern“ („Als Datei sichern und weiter“ oder „Abbrechen“). Danach wird sie im selben Schreibvorgang aus dem Browser entfernt. Ältere Trainingsdateien im Browser (aus 1.x) werden beim Start entfernt, wenn sie gesichert sind; ungesicherte bietet die App bei jedem Start zum Sichern an (Sichern, Verwerfen mit Rückfrage, Später).
+- Jedes Training speichert beim Start ihren Durchgang, in Deload-Wochen `deload: true` und pro Block die damals gültige Vorgabe (`plannedSets`, `repsMax` bzw. `durationSec`). Ältere Trainings ohne diese Felder: Durchgang 1, Deload und Vorgabe aus dem aktuellen Plan.
+- Beendete Trainings lassen sich im Verlauf korrigieren (Werte, Notiz) und löschen. Gelöschte Trainings-IDs stehen in `deletedSessionIds` (begrenzt, älteste fallen heraus), damit sie beim Zusammenführen mit älteren Dateien nicht zurückkommen.
 - Die zuletzt exportierte `revision` und das Datum des letzten Exports speichert die App lokal (IndexedDB). Sie gehören nicht in die exportierte Datei.
 - Abschluss: Nach der letzten Planwoche erscheint der Dialog "Plan abgeschlossen", `status` wird auf `completed` gesetzt und der Export als Archiv angeboten.
 
@@ -85,17 +93,17 @@ Regeln:
 
 - Zwei Dateitypen: reine `plan.json` (vom Agenten) und `.training.json` (Gesamtstand). Mehrfachauswahl ist erlaubt.
 - Eine `plan.json` legt eine neue `.training.json` mit leerer Historie an. Der Import einer `.training.json` stellt alles wieder her, auch bei leerem Browserspeicher.
-- Abgleich bei gleicher `fileId`: Die höhere `revision` gewinnt. Fehlen in der Datei Sessions, die lokal vorhanden sind, werden sie per Session-ID zusammengeführt. `deletedSessionIds` beider Stände werden vereinigt, diese Sessions fallen heraus.
+- Abgleich bei gleicher `fileId`: Die höhere `revision` gewinnt. Fehlen in der Datei Trainings, die lokal vorhanden sind, werden sie per Trainings-ID zusammengeführt. `deletedSessionIds` beider Stände werden vereinigt, diese Trainings fallen heraus.
 - Nach jedem Import wird `progress` aus der Historie neu abgeleitet (ohne Dialog „Plan abgeschlossen“).
-- Vor dem Übernehmen gibt es immer eine Vorschau mit Bestätigung: Planname, Anzahl Einheiten und Übungen, bei Sessions deren Anzahl und Zeitraum. Nie stumm überschreiben.
-- Neuer Plan für eine bestehende Historie, drei Möglichkeiten: „Anpassen“ (laufender Plan, gleicher Durchgang, gleiche Woche, begrenzt auf die Wochen des neuen Plans), „Von vorn“ (neuer Durchgang ab Woche 1, Historie bleibt) und „Ganz neu“ (neuer Trainingsstand mit leerer Historie). Vorbelegt ist „Von vorn“, wenn der Plan abgeschlossen ist, sonst „Anpassen“. Die Zuordnung der Historie läuft über `exerciseId`. Bei „Anpassen“ und „Von vorn“ zeigt die Vorschau in einer Zeile, wie der neue Plan zur Historie passt, z. B. „9 Übungen mit Verlauf · 4 neu · 3 nicht mehr im Plan“ (eindeutige Übungs-IDs: im neuen Plan mit erledigtem Satz im Verlauf, im neuen Plan ohne Verlauf, mit Verlauf im aktuellen, aber nicht im neuen Plan). Teile mit 0 entfallen, ohne Historie entfällt die Zeile. Nach dem Übernehmen nennt ein Hinweis die Übungs-IDs aus der Historie, die im neuen Plan fehlen.
+- Vor dem Übernehmen gibt es immer eine Vorschau mit Bestätigung: Planname, Anzahl Einheiten und Übungen, bei Trainings deren Anzahl und Zeitraum. Nie stumm überschreiben.
+- Neuer Plan bei vorhandener Trainingsdatei, drei Möglichkeiten (ab 2.0): „Anpassen“ (gleiche Trainingsdatei, Plan ersetzt, gleiche Woche, begrenzt auf die Wochen des neuen Plans, erledigte Trainings bleiben unverändert; deren Übungs- und Variantennamen werden vorher festgehalten), „Nachfolger“ (neue Trainingsdatei ab Woche 1 mit Verweis und Startwerten, ersetzt „Von vorn“) und „Ganz neu“ (neue Trainingsdatei ohne Verweis und ohne Startwerte). Vorbelegt ist „Nachfolger“, wenn der Plan abgeschlossen ist, sonst „Anpassen“. Die Zuordnung läuft über `exerciseId`. Bei „Anpassen“ und „Nachfolger“ zeigt die Vorschau in einer Zeile, wie der neue Plan zur Historie passt, z. B. „9 Übungen mit Verlauf · 4 neu · 3 nicht mehr im Plan“ (eindeutige Übungs-IDs: im neuen Plan mit erledigtem Satz im Verlauf, im neuen Plan ohne Verlauf, mit Verlauf im aktuellen, aber nicht im neuen Plan). Teile mit 0 entfallen, ohne Historie entfällt die Zeile. Nach dem Übernehmen nennt ein Hinweis die Übungs-IDs aus der Historie, die im neuen Plan fehlen.
 - Validierung gegen das Schema (handgeschriebener Validator oder lokal gebündelte Bibliothek). Fehler werden mit Pfad und Klartext gemeldet, z. B. `plan.sessions[1].blocks[2].exercises[0]: repsMax fehlt`. Bei einem Fehler wird der Import abgebrochen, nichts wird halb gespeichert (eine Transaktion). Zusätzlich: Größen- und Tiefenlimits, Schutz vor den Schlüsseln `__proto__`, `constructor` und `prototype`, unsinnige Zahlen ablehnen (negativ, NaN, unrealistisch groß). Die konkreten Grenzwerte legst du fest und dokumentierst sie im Code.
 
 ### Export
 
 - Nach jedem Training: Teilen-Menü mit der `.training.json` und dem Hinweis "In Dateien sichern, bei Rückfrage Ersetzen wählen". Primär `navigator.share({files})`, Fallback Download. Ein Abbruch im Teilen-Menü gilt nicht als Export.
 - Nicht gesicherte Änderungen (`revision` größer als zuletzt exportiert) werden im Verlauf markiert, und beim Start erinnert die App dezent daran. Ebenso nach 7 Tagen ohne Export.
-- Optional: CSV-Export der Historie.
+- „Export für Coach“ (ab 2.0, ersetzt den CSV-Export): schlanker Markdown-Text mit dem Plan (Vorgaben pro Woche, RIR-Ziele, Deload, Hauptübungen) und allen Trainings der Trainingsdatei, neuestes zuerst (Sätze, RIR mit Ziel, RPE, Notizen, Varianten, übersprungene Übungen). Ohne technische Felder (IDs außer Übungs-IDs im Planteil, Zeitstempel, Einstellungen, Startwerte). Teilen als `<trainingsdatei>-coach.md` oder Kopieren. Plan und Trainings sind als Daten gekennzeichnet, Backticks und Zeilenumbrüche aus Namen und Notizen werden entschärft. Hinweis, dass die Daten an den Anbieter des KI-Dienstes gehen.
 - Die App darf keinen stillen Export vortäuschen. Der Export bleibt klar: ein Button, ein Tap im Teilen-Menü.
 
 ---
@@ -118,6 +126,7 @@ plan: {
               unit: "kg" | "s" | "bodyweight",
               perSide: false,
               restSec, incrementKg, cue,
+              main,                                 // optional (ab 2.0): Hauptübung, nach dem letzten Satz RIR-Abfrage
               variants: [ { id, name, cue } ],      // optional, Auswahl vor dem Training
               garminCategory, garminSubcategory,    // optional, Zahlen aus dem FIT-Profil
               byWeek: { "3": { sets, repsMin, repsMax, durationSec, cue } } }  // Überschreibungen
@@ -188,7 +197,7 @@ W1–2: 3× 15 s halten · W3: 2×8, 3 s absenken · W4: 2×8, 3 s absenken + 2 
 
 ## 5. UX
 
-**Navigation:** Bottom-Tabbar **Heute · Verlauf · Plan**. Oben rechts ein kleines Menü-Symbol (Burger), das über dem Inhalt schwebt und keine eigene Zeile belegt. Es öffnet ein Sheet mit **Stil** (Hell, Dunkel, Fancy), **Ansicht im Training** (Liste, Fokus), **Signalton** (Aus, Leise, Laut; gilt für das Pausenende und den Halte-Countdown; Leise und Laut spielen beim Wählen einmal zur Probe) und **Info**. Stil, Ansicht und Ton werden in `settings` gespeichert (ohne neue Revision). Standard: Dunkel und Liste. Auf jedem Bildschirm steht unten ein dezenter Link "Impressum & Datenschutz" (nach Review Runde 1 umbenannt, damit Offenlegung und Impressum leicht auffindbar sind).
+**Navigation:** Bottom-Tabbar **Heute · Verlauf · Plan · Archiv** (Archiv ab 2.0). Oben rechts ein kleines Menü-Symbol (Burger), das über dem Inhalt schwebt und keine eigene Zeile belegt. Es öffnet ein Sheet mit **Stil** (Hell, Dunkel, Fancy), **Ansicht im Training** (Liste, Fokus), **Signalton** (Aus, Leise, Laut; gilt für das Pausenende und den Halte-Countdown; Leise und Laut spielen beim Wählen einmal zur Probe) und **Info**. Stil, Ansicht und Ton werden in `settings` gespeichert (ohne neue Revision). Standard: Dunkel und Liste. Auf jedem Bildschirm steht unten ein dezenter Link "Impressum & Datenschutz" (nach Review Runde 1 umbenannt, damit Offenlegung und Impressum leicht auffindbar sind).
 
 **Onboarding (kein Plan gespeichert):** Zwei Wege: "Plan öffnen" (Dateiauswahl, `accept=".json"`) und "Neuen Plan erstellen". Letzteres zeigt einen vorgefertigten Agent-Prompt mit "Kopieren" und "Teilen". Derselbe Prompt ist später unter Plan > "Plan mit KI erstellen/anpassen" abrufbar. Der Prompt ist als Template im Code hinterlegt und enthält:
 1. Rolle: erfahrener Kraft- und Athletiktrainer. Der Agent berät mich ZUERST und stellt gezielt Fragen (Ziele, Zeit pro Woche, Erfahrung, Equipment, Einschränkungen, Sportart, Tagesstruktur). Erst nach meiner Bestätigung erzeugt er den Plan.
@@ -199,7 +208,7 @@ W1–2: 3× 15 s halten · W3: 2×8, 3 s absenken · W4: 2×8, 3 s absenken + 2 
 
 Mit gespeichertem Plan gibt es zusätzlich "Mit aktuellem Plan kopieren (zum Anpassen)" und, sobald es Verlauf gibt, "Mit Plan und letzten Ergebnissen kopieren". Steht der aktuelle Plan im Prompt, gelten ID-Regeln: Übungen, die bleiben, behalten ihre id (Verlauf, Gewichte und Graphen hängen daran), neue Übungen bekommen neue ids, eine bestehende id nie für eine andere Übung, Ziele ändern und Übungen austauschen ist erlaubt. Die Ergebnisse stehen nach dem Plan, eine Zeile pro Übung des Plans mit Verlauf: id, Name, letztes Arbeitsgewicht × Wiederholungen (bzw. Haltezeit oder Wiederholungen bei Körpergewicht), Datum und ob die obere Wiederholungsgrenze in allen Sätzen erreicht wurde, jeweils aus dem letzten Training außerhalb des Deloads. Ohne Notizen. Plan und Ergebnisse sind als reine Daten gekennzeichnet, Backticks darin können den Codeblock nicht beenden. Unter dem Button steht, dass die Ergebnisse an den Anbieter des KI-Dienstes gehen.
 
-**Heute:** Karte "Nächste Einheit" mit Name, "Woche X von Y" (Y = `plan.weeks`), RIR-Ziel, Anzahl Blöcke, geschätzter Dauer und Start-Button. Dazu eine Zeile mit dem letzten beendeten Training: Einheit und wie lange her ("heute", "gestern", "vor N Tagen", Kalendertage in lokaler Zeit), ohne beendetes Training keine Zeile. Bei abgeschlossenem Plan stattdessen die Karte "Plan abgeschlossen" mit "Als Datei sichern" (Archiv), "Nächsten Plan mit KI erstellen" (öffnet den Agent-Prompt) und "Plan erneut starten". Die Formel für die Dauer-Schätzung legst du fest und dokumentierst sie. Darunter der Backup-Status: "Alle Sessions gesichert" oder "1 Session noch nicht gesichert" mit Button.
+**Heute:** Karte "Nächste Einheit" mit Name, "Woche X von Y" (Y = `plan.weeks`), RIR-Ziel, Anzahl Blöcke, geschätzter Dauer und Start-Button. Dazu eine Zeile mit dem letzten beendeten Training: Einheit und wie lange her ("heute", "gestern", "vor N Tagen", Kalendertage in lokaler Zeit), ohne beendetes Training keine Zeile. Bei abgeschlossenem Plan stattdessen die Karte "Plan abgeschlossen" mit "Als Datei sichern" (Archiv), "Nächsten Plan mit KI erstellen" (öffnet den Agent-Prompt) und "Plan erneut starten". Die Formel für die Dauer-Schätzung legst du fest und dokumentierst sie. Darunter der Backup-Status: "Alle Trainings gesichert" oder "1 Training noch nicht gesichert" mit Button.
 
 **Live-Training:**
 - Kopf: Titel, Fortschritt ("x von y Sätzen") und daneben "Beenden" als Textlink (spart eine Zeile).
@@ -208,14 +217,19 @@ Mit gespeichertem Plan gibt es zusätzlich "Mit aktuellem Plan kopieren (zum Anp
 - **Supersets:** eine Karte mit Tabelle (Spalten a/b, Zeilen = Sätze), abwechselnd abzuarbeiten. Der Timer zeigt, zu welcher Übung als Nächstes gewechselt wird.
 - **Ansicht Fokus:** ein Satz pro Bildschirm, große −/+-Stepper für Gewicht und Wiederholungen, großer Button "Satz fertig" (mindestens 64 px), Info "Letztes Mal" und Ziel.
 - Varianten (z. B. Leg Curl A/B) werden vor dem ersten Satz ausgewählt. Die gewählte Variante steht im Titel der Übung (z. B. „Leg Curl · A: Slider“). Außerdem: Übung überspringen, Notiz pro Übung, Satz hinzufügen und entfernen. Ein abgeschlossener Satz lässt sich rückgängig machen (Schutz gegen Fehltaps).
-- **Später:** Im Optionen-Sheet einer Übung (⋯, beide Ansichten) stellt "Später" den ganzen Block zurück (Einzelübung oder Superset), z. B. wenn das Gerät belegt ist. Seine offenen Sätze werden übergangen, solange andere offen sind, danach kommen zurückgestellte Blöcke in Plan-Reihenfolge dran. "Jetzt machen" oder ein erledigter Satz des Blocks hebt das auf. Die Liste zeigt den Tag "später". Gespeichert wird das nur im laufenden Training (`deferred`, Block-Nummern), nicht in der fertigen Session.
+- **Später:** Im Optionen-Sheet einer Übung (⋯, beide Ansichten) stellt "Später" den ganzen Block zurück (Einzelübung oder Superset), z. B. wenn das Gerät belegt ist. Seine offenen Sätze werden übergangen, solange andere offen sind, danach kommen zurückgestellte Blöcke in Plan-Reihenfolge dran. "Jetzt machen" oder ein erledigter Satz des Blocks hebt das auf. Die Liste zeigt den Tag "später". Gespeichert wird das nur im laufenden Training (`deferred`, Block-Nummern), nicht in der fertigen Training.
 - **Halten:** Für Haltezeit-Übungen startet "Halten starten" (Fokus und aktiver Satz in der Liste) einen Countdown: 5 s Vorlauf ("Gleich geht’s los"), dann die Sekunden des Satzes, bei `perSide` Seite 1, 5 s "Seite wechseln", Seite 2. Ton (laut Einstellung) und Vibration bei Beginn und Ende jedes Haltens. Gerechnet wird aus Zeitstempeln. Am Ende wird der Satz wie mit dem Haken abgeschlossen (Pause und Rückgängig wie gewohnt), "Abbrechen" lässt ihn offen. Der Countdown liegt nur im Speicher. Im Fokus ersetzt seine Anzeige den Stepper, damit nichts höher wird.
 - **Notiz vom letzten Mal:** Die Notiz der Leistung, die "Letztes Mal" liefert, steht als "Notiz letztes Mal: …" in der Karte, im Fokus einzeilig gekürzt und vollständig im Optionen-Sheet. Leere Notizen zeigen nichts.
-- Abschluss: Bestätigungsdialog, Dauer, Zusammenfassung, Export-Button "Als Datei sichern" (Hauptaktion), darunter "Für Garmin exportieren" für das eben beendete Training. Keine Gesundheits- oder Gefühlsabfrage.
+- **Hauptübungen und RIR (ab 2.0):** Übungen mit `main: true` tragen den Tag „Haupt“. Nach dem letzten Satz einer Hauptübung fragt die App „Wie viele Wiederholungen wären noch gegangen?“ mit Chips 0 · 1 · 2 · 3 · 4+ und dem RIR-Ziel der Woche: während der Pause danach in der Pausenleiste (anstelle von „Als Nächstes“), sonst in der Karte bzw. im Fokus nach der letzten Übung. Nicht antippen heißt keine Angabe. Ein wieder geöffneter oder hinzugefügter Satz entfernt den Wert. Verwendet nur für Coach-Export und Agent-Prompt, nicht für Garmin und nicht für den Gewichtsvorschlag.
+- Abschluss: Bestätigungsdialog mit freiwilliger RPE des ganzen Trainings (Schieberegler 0–10, startet ohne Wert, Wörter von „Ruhe“ bis „maximal“, „Zurücksetzen“) und Notiz zum Training (ab 2.0), dann Dauer, Zusammenfassung, Export-Button "Als Datei sichern" (Hauptaktion), darunter "Für Garmin exportieren" für das eben beendete Training. Keine weiteren Gesundheits- oder Gefühlsabfragen.
 
-**Verlauf:** Liste der Sessions mit Status "gesichert" bzw. "nicht gesichert", Detailansicht, pro Übung ein einfacher Verlaufsgraph (Gewicht des Top-Satzes) als eigenes SVG ohne Chart-Bibliothek. In der Detailansicht der Button "Für Garmin exportieren" (siehe 7). Dort lassen sich die Werte jedes Satzes (Stepper wie im Training) und die Notiz pro Übung korrigieren, und "Training löschen" entfernt die Session nach Bestätigung. Die aktuelle Woche wird dabei nicht zurückgesetzt.
+**Verlauf:** Liste der Trainings mit Status "gesichert" bzw. "nicht gesichert", Detailansicht, pro Übung ein einfacher Verlaufsgraph (Gewicht des Top-Satzes) als eigenes SVG ohne Chart-Bibliothek. In der Detailansicht der Button "Für Garmin exportieren" (siehe 7). Dort lassen sich die Werte jedes Satzes (Stepper wie im Training) und die Notiz pro Übung korrigieren, und "Training löschen" entfernt die Training nach Bestätigung. Die aktuelle Woche wird dabei nicht zurückgesetzt.
 
-**Plan:** Plan ansehen, aktuelle Woche manuell setzen, Plan öffnen, "Plan mit KI erstellen/anpassen", Gesamtstand sichern, CSV-Export. Ist die gewählte Woche im aktuellen Durchgang schon geschafft, gibt es einen kurzen Hinweis und "Woche wiederholen". Bei abgeschlossenem Plan (auch auf "Heute") "Plan erneut starten" mit Bestätigung.
+**Plan:** Plan ansehen (mit Vorgänger, falls vorhanden), aktuelle Woche manuell setzen, Plan öffnen, "Plan mit KI erstellen/anpassen", Gesamtstand sichern, "Export für Coach". Ist die gewählte Woche im aktuellen Durchgang schon geschafft, gibt es einen kurzen Hinweis und "Woche wiederholen". Bei abgeschlossenem Plan (auch auf "Heute") "Plan erneut starten" mit Bestätigung.
+
+**Verlauf (ab 2.0 zusätzlich):** RPE, Notiz zum Training und RIR je Hauptübung werden angezeigt und lassen sich korrigieren. Namen von Übung und Variante kommen aus dem Training, sonst aus dem Plan.
+
+**Archiv (ab 2.0):** Vierter Tab, auch vom Startbildschirm ohne Plan erreichbar. Öffnet eine Trainingsdatei oder Plandatei nur lesend (geprüft wie beim Import, nie gespeichert, nach einem Neustart leer, die aktive Trainingsdatei bleibt unberührt). Zeigt Datei- und Planname, Anzahl Trainings, Vorgänger, die Trainings mit Graph und Detailansicht (ohne Korrekturen und Löschen) und den Plan mit Wochenwahl. Aktionen: „Export für Coach“ und „Für Garmin exportieren“. Immer nur eine Datei.
 
 **Training beenden:** Ist weniger als die Hälfte der Sätze erledigt, sagt der Bestätigungsdialog, dass die Einheit in dieser Woche offen bleibt.
 
@@ -264,7 +278,7 @@ Die Texte werden nur über die Konfiguration verändert, nicht automatisch. Der 
 
 ## 7. Garmin-Export (optional, pro Workout)
 
-- In der Verlaufs-Detailansicht einer Session und auf dem Bildschirm "Training abgeschlossen" gibt es den Button "Für Garmin exportieren". Erst dann wird die `.fit`-Datei aus der gespeicherten Session erzeugt und über das Teilen-Menü angeboten. Das JSON bleibt die Wahrheit. FIT ist eine Einbahnstraße und wird von der App nie gelesen.
+- In der Verlaufs-Detailansicht eines Trainings und auf dem Bildschirm "Training abgeschlossen" gibt es den Button "Für Garmin exportieren". Erst dann wird die `.fit`-Datei aus der gespeicherten Training erzeugt und über das Teilen-Menü angeboten. Das JSON bleibt die Wahrheit. FIT ist eine Einbahnstraße und wird von der App nie gelesen.
 - FIT-Inhalt: `sport = training`, `sub_sport = strength_training`. Pro Satz eine Set-Nachricht (Garmin-Kategorie und -Unterkategorie, Wiederholungen, Gewicht, Dauer, Startzeit), Pausen als Rest-Sets, eine Session-Nachricht mit Summen (Dauer, Sätze, Wiederholungen). Kein Puls.
 - Encoder lokal im Repo, kein CDN: entweder das Garmin FIT SDK für JavaScript lokal bündeln (Lizenz vorher prüfen und im Schrittbericht nennen) oder ein eigener kleiner Binär-Encoder (Header, Definition- und Data-Messages, CRC). Für den Encoder gibt es Unit-Tests (mindestens CRC und Header).
 - Plan-Schema: pro Übung optional `garminCategory` und `garminSubcategory`. Fallback: nächstliegende Kategorie, sonst "other". Squat und RDL passen, Exoten wie Pogo Jumps oder Tibialis-Raise landen vermutlich unter "other". Der Agent-Prompt enthält die Tabelle der Hauptkategorien (Nummer und Name), damit die KI `garminCategory` für jede Übung setzen kann; `garminSubcategory` nur, wenn sicher bekannt. IDs möglichst nach dem englischen Übungsnamen.
@@ -299,7 +313,7 @@ Außerdem: README mit Hosting-Anleitung (GitHub Pages, Workflow), Installation a
 
 ## 9. Abschluss-Prüfung durch unabhängige Spezial-Instanzen
 
-Wenn die App fertig ist und alle Tests laufen, starte drei Reviewer als getrennte Subagents mit frischem Kontext, parallel.
+Wenn die App fertig ist und alle Tests laufen, starte vier Reviewer als getrennte Subagents mit frischem Kontext, parallel (Reviewer 4 Code-Qualität seit Runde 3, in die Spezifikation aufgenommen für 2.0).
 
 Jeder Reviewer bekommt NUR: Repo-Pfad, diese Spezifikation, seine Rolle und das Ausgabeformat. Gib ihnen NICHT deine eigene Einschätzung (z. B. "ist sicher", "ist rechtlich in Ordnung"). Die Reviewer arbeiten lesend: keine Änderungen am Code, einzige Ausnahme ist ihre eigene Berichtsdatei unter `reviews/`. Sie dürfen die App lokal starten und testen und im Web recherchieren (mit Quellenangabe).
 
@@ -334,7 +348,15 @@ Jeder Reviewer bekommt NUR: Repo-Pfad, diese Spezifikation, seine Rolle und das 
 - Barrierefreiheit: Kontraste in allen drei Stilen (WCAG AA), VoiceOver-Beschriftungen (`aria-label`, Rollen, Fokus-Reihenfolge), Zustände nicht nur über Farbe, `prefers-reduced-motion`, Fokus-Sichtbarkeit.
 - Bedienfluss: Wie viele Taps bis zum ersten Satz, pro Satz, bis zum Export? Wo gibt es Sackgassen, unklare Zustände oder Fehlermeldungen ohne Handlungsanweisung? Sind die Texte durchgängig auf Deutsch und verständlich?
 
-**Ausgabe (alle Reviewer):** je ein Bericht in `reviews/security.md`, `reviews/legal.md` bzw. `reviews/ios-ux.md` (ab Runde 2 mit Rundennummer, z. B. `reviews/security-r2.md`, damit frühere Berichte erhalten bleiben).
+**Reviewer 4: Code-Qualität.** Prüfe den Code lesend auf Korrektheit, Wartbarkeit und Übereinstimmung mit dieser Spezifikation und `CLAUDE.md`. Führe `npm test` und, wo möglich, die Browser-Prüfungen aus. Mindestens:
+- Fachlogik gegen die Spezifikation: Datenmodell und Validator (inkl. Lesen älterer Schemaversionen), Wochen-Ableitung, Progression, Deload, Vorbelegung, Startwerte und Nachfolger, Import und Abgleich, Backup-Status, Korrigieren und Löschen, Exporte (JSON, Coach-Export, FIT).
+- Zustand und Speicher: laufendes Training (Autosave, Wiederherstellen, Abschluss), Wettläufe zwischen Speichern und Neuzeichnen, Transaktionen in IndexedDB, Wechsel der aktiven Trainingsdatei, nichts wird halb gespeichert.
+- Konsistenz: App, Validator, Agent-Prompt und Testfixture laufen nicht auseinander; Begriffe aus `docs/begriffe.md`.
+- Wartbarkeit: tote oder doppelte Stellen, unklare Zuständigkeiten, Kommentare, die nicht mehr stimmen.
+- Tests: Abdeckung der Fachlogik und der Abläufe, Lücken mit konkreten Testfällen benennen.
+- Repo-Regeln aus `CLAUDE.md` (kein `innerHTML` für Daten, keine externen Requests, `npm run sw` aktuell, Version und Changelog).
+
+**Ausgabe (alle Reviewer):** je ein Bericht in `reviews/security.md`, `reviews/legal.md`, `reviews/ios-ux.md` bzw. `reviews/code-qualitaet.md` (ab Runde 2 mit Rundennummer, z. B. `reviews/security-r2.md`, damit frühere Berichte erhalten bleiben).
 - Am Anfang: Liste der geprüften Punkte und der Punkte, die nicht geprüft werden konnten (mit Grund).
 - Findings nach Schwere (kritisch, hoch, mittel, niedrig), jeweils mit: Fundstelle (Datei:Zeile oder Schritte zum Nachstellen), Beschreibung, Auswirkung, konkreter Empfehlung, Sicherheit der Einschätzung.
 - Nichts als "in Ordnung" melden, was nicht tatsächlich geprüft wurde.

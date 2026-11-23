@@ -5,6 +5,22 @@ const nf = new Intl.NumberFormat('de-AT', { maximumFractionDigits: 2 });
 export const fmtNum = (n) => (n === null || n === undefined || Number.isNaN(n) ? '–' : nf.format(n));
 export const fmtKg = (n) => `${fmtNum(n)} kg`;
 
+/** Lokales Datum JJJJ-MM-TT. */
+export function localDate(d) {
+  const x = new Date(d);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`;
+}
+
+/** RIR-Wert zum Anzeigen: 4 steht für „4+“. */
+export const fmtRir = (v) => (v >= 4 ? '4+' : String(v));
+
+/** RIR-Ziel aus dem Plan zum Anzeigen: Bindestrich zwischen Zahlen als Halbgeviertstrich („2-3“ → „2–3“). Leer: null. */
+export function fmtRirTarget(t) {
+  if (t == null || String(t).trim() === '') return null;
+  return String(t).replace(/(\d)\s*-\s*(\d)/g, '$1–$2');
+}
+
 export function fmtClock(sec) {
   const s = Math.max(0, Math.round(sec));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;

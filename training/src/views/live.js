@@ -1,8 +1,8 @@
 // Live-Training: Ansicht Liste (Standard) und Fokus, Pausentimer, Bearbeiten-Sheet.
 
 import { h, icon } from '../dom.js';
-import { fmtClock, fmtNum, fmtSet, fmtSetShort, fmtTarget, fmtLast, parseNum } from '../format.js';
-import { activeSlot, progress, restRemaining, isDeferred, holdPhase, stepValue, KG_STEPS, itemTitle } from '../model/live.js';
+import { fmtClock, fmtNum, fmtSet, fmtSetShort, fmtTarget, fmtLast, parseNum, fmtRir, fmtRirTarget } from '../format.js';
+import { activeSlot, progress, restRemaining, isDeferred, holdPhase, stepValue, KG_STEPS, itemTitle, rirDue } from '../model/live.js';
 
 export const SEC_STEP = 5;
 
@@ -103,6 +103,91 @@ function lastNoteLine(item, oneLine = false) {
   return text ? h('p', { class: `mut small${oneLine ? ' one-line' : ''}`, 'data-last-note': '' }, text) : null;
 }
 
+/** Tag „Haupt“ für Hauptübungen: Nach dem letzten Satz fragt die App nach dem RIR. */
+function mainTag(item) {
+  if (!item.main) return null;
+  // „Haupt“ sichtbar, für VoiceOver ausgeschrieben (title liest iOS nicht vor).
+  return h('span', { class: 'tag main' }, h('span', { 'aria-hidden': 'true' }, 'Haupt'), h('span', { class: 'sr-only' }, 'Hauptübung, nach dem letzten Satz kommt die RIR-Frage'));
+}
+
+// ---------- RIR nach dem letzten Satz ----------
+
+/** RIR-Werte der Chips. 4 steht für „4+“. */
+export const RIR_VALUES = [0, 1, 2, 3, 4];
+export const rirText = fmtRir;
+export const rirTargetText = fmtRirTarget;
+
+/** Übung des zuletzt abgehakten Satzes (nach doneAt), sonst null. */
+function lastDoneItem(live) {
+  let best = null;
+  let bestAt = -Infinity;
+  live.session.blocks.forEach((b, i) => {
+    for (const s of b.sets) {
+      const at = s.done && s.doneAt ? Date.parse(s.doneAt) : -Infinity;
+      if (at >= bestAt && at > -Infinity) { best = i; bestAt = at; }
+    }
+  });
+  return best;
+}
+
+/**
+ * Fokus: Übung, deren RIR-Chips in der Pausenleiste stehen. Das ist die Hauptübung, deren letzter Satz zuletzt abgehakt
+ * wurde, bis der nächste Satz abgehakt ist (mit oder ohne Pause, Review r4 Code-Qualität N2). In der Liste steht die
+ * Frage stattdessen in der Karte der Übung (Review r4 iOS M-1/M-3), die Leiste behält „Als Nächstes“.
+ */
+export function rirBarItem(live, view = 'focus') {
+  if (view !== 'focus') return null;
+  const i = lastDoneItem(live);
+  return i != null && rirDue(live, i) ? i : null;
+}
+
+/** Chips 0 · 1 · 2 · 3 · 4+. Ein Tap auf den gewählten Wert nimmt ihn wieder heraus. */
+function rirChips(live, i, A, cls = 'chips rir-chips') {
+  const item = live.items[i];
+  const value = live.session.blocks[i].rirLast ?? null;
+  return h('div', { class: cls, role: 'group', 'aria-label': `RIR ${item.name}: Wie viele Wiederholungen wären noch gegangen?` },
+    RIR_VALUES.map((v) => h('button', {
+      'aria-pressed': value === v, 'data-fid': `rir-${i}-${v}`,
+      'aria-label': `${rirText(v)} ${v === 1 ? 'Wiederholung' : 'Wiederholungen'} im Tank`,
+      onclick: () => A.rir(i, v),
+    }, rirText(v))));
+}
+
+/**
+ * RIR-Abfrage in der Karte (Liste) bzw. im Fokus am Ende. Unbeantwortet mit Frage und Chips; beantwortet nur eine Zeile
+ * „RIR 2 · Ziel 3 · ändern“ zum Aufklappen, damit nichts springt (Review r4 iOS M-1).
+ */
+function rirPanel(live, i, A) {
+  const target = rirTargetText(live.rirTarget);
+  const value = live.session.blocks[i].rirLast;
+  if (value != null) {
+    return h('details', { class: 'rir-panel rir-done', 'data-fid': `rir-panel-${i}` },
+      h('summary', {}, `RIR ${rirText(value)}${target ? ` · Ziel ${target}` : ''}`, h('span', { class: 'rir-edit' }, ' · ändern')),
+      rirChips(live, i, A));
+  }
+  return h('div', { class: 'rir-panel', 'data-fid': `rir-panel-${i}` },
+    h('p', { class: 'small' }, h('b', {}, 'Wie viele Wiederholungen wären noch gegangen?'),
+      target ? h('span', { class: 'mut' }, ` Ziel diese Woche: ${target}`) : null),
+    rirChips(live, i, A));
+}
+
+/** Liste: Frage in der Karte, sobald der letzte Satz abgehakt ist (nicht erst am Pausenende). */
+function rirCardPanel(live, i, A) {
+  return rirDue(live, i) ? rirPanel(live, i, A) : null;
+}
+
+/** Zuletzt beendete Hauptübung, deren RIR-Frage offen ist (für den Fokus nach dem letzten Satz). */
+function lastRirItem(live) {
+  let best = null;
+  let bestAt = -Infinity;
+  live.items.forEach((it, i) => {
+    if (!rirDue(live, i)) return;
+    const at = Math.max(...live.session.blocks[i].sets.map((s) => (s.doneAt ? Date.parse(s.doneAt) : 0)));
+    if (at >= bestAt) { best = i; bestAt = at; }
+  });
+  return best;
+}
+
 /** Tags im Kartenkopf: übersprungen bzw. später (Zustand als Text, nicht nur über Farbe). */
 function stateTag(live, i) {
   if (live.session.blocks[i].skipped) return h('span', { class: 'tag' }, 'übersprungen');
@@ -183,6 +268,7 @@ function singleCard(live, i, act, A, hold) {
   return h('section', { class: `card${block.skipped ? ' dim' : ''}`, 'aria-label': itemTitle(live, i) },
     h('div', { class: 'card-head' },
       h('div', { class: 'grow' }, h('h3', {}, itemTitle(live, i)), h('div', { class: 'mut small' }, subline(item))),
+      mainTag(item),
       stateTag(live, i),
       moreButton(item, i, A)),
     block.skipped ? null : lastNoteLine(item),
@@ -196,6 +282,7 @@ function singleCard(live, i, act, A, hold) {
         checkButton(item, i, s, set, A, false, cur));
     }),
     holdControl(live, act, [i], hold, A),
+    rirCardPanel(live, i, A),
     increaseButton(live, i, A),
     noteLine(block));
 }
@@ -217,6 +304,7 @@ function supersetCard(live, ia, ib, act, A, hold) {
     h('div', { class: 'grow' },
       h('h3', {}, `${item.slot}) ${itemTitle(live, i)}`),
       h('div', { class: 'mut small' }, subline(item))),
+    mainTag(item),
     stateTag(live, i),
     moreButton(item, i, A));
   const lastNote = (item, block) => (block.skipped ? null : lastNoteLine(item));
@@ -229,6 +317,7 @@ function supersetCard(live, ia, ib, act, A, hold) {
       h('span', { class: 'n', 'aria-hidden': 'true' }, s + 1),
       cell(a, ia, ba, s), cell(b, ib, bb, s))),
     holdControl(live, act, [ia, ib], hold, A),
+    rirCardPanel(live, ia, A), rirCardPanel(live, ib, A),
     increaseButton(live, ia, A), increaseButton(live, ib, A),
     noteLine(ba), noteLine(bb));
 }
@@ -333,7 +422,13 @@ export function steppersFor(item, set, i, s, A) {
 function focusBody(live, A, hold) {
   const act = activeSlot(live);
   if (!act) {
-    return [allDoneCard()];
+    // Nach dem letzten Satz der letzten Übung folgt keine Pause: Die RIR-Frage steht dann hier.
+    const ri = lastRirItem(live);
+    const showRir = ri != null && rirBarItem(live, 'focus') !== ri;
+    return [
+      allDoneCard(),
+      showRir ? h('section', { class: 'card', 'aria-label': `RIR ${itemTitle(live, ri)}` }, h('h3', {}, itemTitle(live, ri)), rirPanel(live, ri, A)) : null,
+    ];
   }
   const { i, s } = act;
   const item = live.items[i];
@@ -347,6 +442,7 @@ function focusBody(live, A, hold) {
         h('div', { class: 'grow' },
           h('div', { class: 'mut small' }, `${item.slot ? `Superset ${item.slot}) · ` : ''}Satz ${s + 1} von ${block.sets.length}`),
           h('h2', { class: 'focus-name' }, itemTitle(live, i))),
+        mainTag(item),
         moreButton(item, i, A)),
       h('p', { class: 'mut small' }, [last ? `Letztes Mal: ${last}` : 'Noch kein letztes Mal', ` · Ziel: ${target}${item.perSide ? ' pro Seite' : ''}`].join('')),
       lastNoteLine(item, true)),
@@ -383,13 +479,15 @@ export function restBar(live, A, now = Date.now(), { undo = null, ready = false,
   const running = rem > 0;
   const go = !running && ready;
   const allDone = !activeSlot(live);
-  return h('section', { class: `card rest${running ? ' running' : ''}${go ? ' ready' : ''}`, 'aria-label': 'Pausentimer' },
+  const rir = rirBarItem(live, view);
+  return h('section', { class: `card rest${running ? ' running' : ''}${go ? ' ready' : ''}${rir != null ? ' has-rir' : ''}`, 'aria-label': 'Pausentimer' },
     // Alles erledigt: keine Zeit mehr (es folgt keine Pause), damit Rückgängig und Abschließen nebeneinander passen.
     allDone && !running
       ? h('span')
       : h('div', { class: 'time' },
         h('span', { id: 'rest-time', role: 'timer', 'aria-live': 'off' }, fmtClock(rem)),
-        h('small', {}, running ? 'Pause' : hold ? 'Halten' : go ? 'Los!' : 'Bereit')),
+        // Neben „Rückgängig“ ist kein Platz für das Wort (würde abgeschnitten, Review r4 iOS N-2); die Farbe zeigt den Zustand.
+        undo && running ? null : h('small', {}, running ? 'Pause' : hold ? 'Halten' : go ? 'Los!' : 'Bereit')),
     // Kurz nach einem Satz steht „Rückgängig“ an der Stelle von „+30 s“ (gleiche Höhe, Fokus-Modus passt weiter auf 375 × 630).
     undo
       ? h('button', { class: 'btn ghost sm', 'data-fid': 'undo', 'aria-label': `Rückgängig: ${undo.text}`, onclick: A.undo }, 'Rückgängig')
@@ -400,7 +498,13 @@ export function restBar(live, A, now = Date.now(), { undo = null, ready = false,
       : running ? h('button', { class: 'btn sm', 'data-fid': 'rest-skip', 'aria-label': 'Weiter, Pause beenden', onclick: A.restSkip }, 'Weiter') : h('span'),
     h('div', { class: 'rest-foot' },
       viewToggle(view, A),
-      h('div', { class: 'next' }, undo ? `${undo.text}` : allDone ? 'Alle Sätze erledigt' : hold ? `Halten läuft: ${nextLabel(live)}` : `Als Nächstes: ${nextLabel(live)}`)));
+      // Fokus nach dem letzten Satz einer Hauptübung: Frage mit Übungsname, darunter die Chips über die ganze Breite
+      // (Abstand zu „Rückgängig“/„Weiter“ siehe .has-rir, Review r4 iOS M-2/M-3).
+      rir != null
+        ? h('div', { class: 'rir-bar', 'data-fid': 'rir-bar' },
+          h('p', { class: 'rir-title' }, h('b', {}, live.items[rir].name), ` · RIR?${live.rirTarget ? ` Ziel ${rirTargetText(live.rirTarget)}` : ''}`),
+          rirChips(live, rir, A, 'rir-chips'))
+        : h('div', { class: 'next' }, undo ? `${undo.text}` : allDone ? 'Alle Sätze erledigt' : hold ? `Halten läuft: ${nextLabel(live)}` : `Als Nächstes: ${nextLabel(live)}`)));
 }
 
 /** Ansicht wechseln, immer erreichbar unten in der Leiste (das Menü scrollt in der Liste weg). view: 'list' | 'focus'. */

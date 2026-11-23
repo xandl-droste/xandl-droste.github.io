@@ -1,7 +1,7 @@
 // Verlauf: Liste der Sessions, Detailansicht und Verlaufsgraph je Übung (eigenes SVG).
 
 import { h, svgEl } from '../dom.js';
-import { fmtDay, fmtNum } from '../format.js';
+import { fmtDay, fmtNum, fmtRir as rirText, fmtRirTarget as rirTargetText } from '../format.js';
 import { backupText, sessionSaveState } from '../model/backup.js';
 import { nameIndex, endedSessions, sessionStats, exerciseSeries, exercisesWithHistory, chartGeometry, loggedUnit } from '../model/history.js';
 
@@ -50,9 +50,22 @@ function chartCard(file, ui, A) {
     h('label', { class: 'field', for: 'chart-ex' },
       h('span', { class: 'mut small' }, `Verlauf je Übung · ${METRIC[series.metric].label}`),
       h('select', { id: 'chart-ex', class: 'select', 'data-fid': 'chart-ex', onchange: (e) => A.chartExercise(e.target.value) },
-        ids.map((id) => h('option', { value: id, selected: id === current }, names.exercise(id))))),
-    chart(series, names.exercise(current)));
+        ids.map((id) => h('option', { value: id, selected: id === current }, exerciseLabel(file, names, id))))),
+    chart(series, exerciseLabel(file, names, current)));
 }
+
+/**
+ * Name einer Übung für Auswahl und Graph: der zuletzt in einem Training gespeicherte, sonst aus dem Plan (wie in der
+ * Detailansicht, Review r4 Code-Qualität N3).
+ */
+function exerciseLabel(file, names, id) {
+  for (let k = file.sessions.length - 1; k >= 0; k--) {
+    const b = file.sessions[k].blocks.find((x) => x.exerciseId === id && x.name);
+    if (b) return b.name;
+  }
+  return names.exercise(id);
+}
+
 
 /** Tag „gesichert“ / „nicht gesichert“; ohne Tag, wenn unklar ist, ob gerade dieses Training geändert wurde. */
 function saveTag(state) {
@@ -61,15 +74,20 @@ function saveTag(state) {
   return null;
 }
 
-export function historyList(file, backup, ui, A) {
+/**
+ * Liste der Trainings mit Verlaufsgraph.
+ * readOnly (Archiv): ohne Überschrift „Verlauf“, ohne Sicherungs-Hinweise und -Tags.
+ */
+export function historyList(file, backup, ui, A, { readOnly = false } = {}) {
   const sessions = endedSessions(file);
   const names = nameIndex(file.plan);
-  const notice = backupText({ ...backup, remind: false });
+  const notice = readOnly ? null : backupText({ ...backup, remind: false });
+  const title = readOnly ? h('h2', { class: 'section-title' }, 'Trainings') : h('h1', {}, 'Verlauf');
   if (!sessions.length) {
-    return [h('h1', {}, 'Verlauf'), h('section', { class: 'card' }, h('p', { class: 'mut' }, 'Noch keine Trainings. Nach dem ersten Training erscheint es hier.'))];
+    return [title, h('section', { class: 'card' }, h('p', { class: 'mut' }, readOnly ? 'Die Datei enthält keine Trainings.' : 'Noch keine Trainings. Nach dem ersten Training erscheint es hier.'))];
   }
   return [
-    h('h1', {}, 'Verlauf'),
+    title,
     notice ? h('section', { class: 'card' },
       h('p', { class: 'mut' }, notice),
       h('button', { class: 'btn ghost', onclick: A.exportAll }, 'Jetzt sichern')) : null,
@@ -77,14 +95,14 @@ export function historyList(file, backup, ui, A) {
     h('ul', { class: 'list', 'aria-label': 'Trainings' },
       sessions.map((s) => {
         const st = sessionStats(s);
-        const state = sessionSaveState(backup, s.id);
+        const state = readOnly ? null : sessionSaveState(backup, s.id);
         return h('li', {},
           h('button', { class: 'card list-item', 'data-fid': `sess-${s.id}`, onclick: () => A.openSession(s.id) },
             h('div', { class: 'row2' },
               h('h3', {}, fmtDay(s.date)),
               saveTag(state)),
             h('span', { class: 'mut' }, `${names.session(s.sessionKey)} · ${weekLabel(s)}`),
-            h('span', { class: 'mut small' }, `${st.done} von ${st.total} Sätzen${st.minutes != null ? ` · ${st.minutes} Min` : ''}`)));
+            h('span', { class: 'mut small' }, `${st.done} von ${st.total} Sätzen${st.minutes != null ? ` · ${st.minutes} Min` : ''}${s.rpe != null ? ` · RPE ${s.rpe}` : ''}`)));
       })),
   ];
 }
@@ -96,32 +114,44 @@ function fmtLoggedSet(unit, set) {
   return `${reps} Wdh.`;
 }
 
-export function historyDetail(file, sessionId, backup, A) {
+/**
+ * Detailansicht eines Trainings. readOnly (Archiv): nur ansehen und für Garmin exportieren, keine Korrekturen,
+ * kein Löschen, keine Sicherungs-Hinweise.
+ */
+export function historyDetail(file, sessionId, backup, A, { readOnly = false } = {}) {
   const s = file.sessions.find((x) => x.id === sessionId);
   if (!s) return [h('p', { class: 'mut' }, 'Training nicht gefunden.'), h('button', { class: 'btn ghost', onclick: A.back }, 'Zurück')];
   const names = nameIndex(file.plan);
   const st = sessionStats(s);
-  const state = sessionSaveState(backup, s.id);
+  const state = readOnly ? null : sessionSaveState(backup, s.id);
+  const canEdit = Boolean(s.endedAt) && !readOnly;
   return [
-    h('div', {}, h('button', { class: 'link back', 'data-fid': 'back', onclick: A.back }, '‹ Verlauf')),
+    h('div', {}, h('button', { class: 'link back', 'data-fid': 'back', onclick: A.back }, readOnly ? '‹ Archiv' : '‹ Verlauf')),
     h('h1', {}, `${fmtDay(s.date)} · ${names.session(s.sessionKey)}`),
     h('section', { class: 'card' },
       h('div', { class: 'row2' },
         h('span', { class: 'mut' }, `${weekLabel(s)} · ${st.done} von ${st.total} Sätzen${st.minutes != null ? ` · ${st.minutes} Min` : ''}`),
         saveTag(state)),
-      state === 'saved' ? null : h('button', { class: 'btn ghost', onclick: A.exportAll }, 'Jetzt sichern'),
+      s.endedAt && (canEdit || s.rpe != null) ? h('div', { class: 'row2' },
+        h('span', {}, s.rpe != null ? `RPE ${s.rpe}` : h('span', { class: 'mut' }, 'Keine RPE')),
+        canEdit ? h('button', { class: 'link', 'data-fid': 'hrpe-edit', 'aria-label': s.rpe != null ? `RPE ${s.rpe} ändern` : 'RPE eintragen', onclick: A.editRpe }, s.rpe != null ? 'Ändern' : 'Eintragen') : null) : null,
+      s.note ? h('p', { class: 'small' }, `Notiz: ${s.note}`) : null,
+      canEdit ? h('button', { class: 'link', 'data-fid': 'hsnote', 'aria-label': `Notiz zum Training ${s.note ? 'bearbeiten' : 'hinzufügen'}`, onclick: A.editSessionNote }, s.note ? 'Notiz zum Training bearbeiten' : 'Notiz zum Training hinzufügen') : null,
+      readOnly || state === 'saved' ? null : h('button', { class: 'btn ghost', onclick: A.exportAll }, 'Jetzt sichern'),
       s.endedAt && st.done > 0
         ? h('button', { class: 'btn ghost', 'data-fid': 'garmin-export', onclick: () => A.exportGarmin(s.id) }, 'Für Garmin exportieren')
         : null),
     s.blocks.map((b, bi) => {
       const unit = loggedUnit(names.unit(b.exerciseId), b);
-      const name = names.exercise(b.exerciseId);
-      const editable = Boolean(s.endedAt);
-      const variant = names.variant(b.exerciseId, b.variantId);
+      const name = names.blockExercise(b);
+      const editable = canEdit;
+      const variant = names.blockVariant(b);
+      const showRir = !b.skipped && (b.rirLast != null || names.main(b.exerciseId));
+      const target = rirTargetText(file.plan.rirTargets?.[String(s.week)]);
       const series = exerciseSeries(file, b.exerciseId);
-      return h('section', { class: `card${b.skipped ? ' dim' : ''}`, 'aria-label': names.exercise(b.exerciseId) },
+      return h('section', { class: `card${b.skipped ? ' dim' : ''}`, 'aria-label': name },
         h('div', { class: 'card-head' },
-          h('div', { class: 'grow' }, h('h3', {}, names.exercise(b.exerciseId)), variant ? h('div', { class: 'mut small' }, `Variante: ${variant}`) : null),
+          h('div', { class: 'grow' }, h('h3', {}, name), variant ? h('div', { class: 'mut small' }, `Variante: ${variant}`) : null),
           b.skipped ? h('span', { class: 'tag' }, 'übersprungen') : null),
         b.skipped ? null : h('ol', { class: 'sets' },
           b.sets.map((set, si) => {
@@ -130,10 +160,15 @@ export function historyDetail(file, sessionId, backup, A) {
               ? h('button', { class: `link set-edit${set.done ? '' : ' open'}`, 'data-fid': `hset-${bi}-${si}`, 'aria-label': `${name}, Satz ${si + 1}: ${text}. Ändern`, onclick: () => A.editSet(bi, si) }, text)
               : text);
           })),
+        showRir ? h('div', { class: 'row2' },
+          h('span', { class: b.rirLast != null ? '' : 'mut' }, b.rirLast != null
+            ? `RIR nach dem letzten Satz: ${rirText(b.rirLast)}${target ? ` (Ziel ${target})` : ''}`
+            : 'Kein RIR eingetragen'),
+          editable ? h('button', { class: 'link', 'data-fid': `hrir-edit-${bi}`, 'aria-label': `RIR ${name} ${b.rirLast != null ? 'ändern' : 'eintragen'}`, onclick: () => A.editRir(bi) }, b.rirLast != null ? 'Ändern' : 'Eintragen') : null) : null,
         b.note ? h('p', { class: 'mut small' }, `Notiz: ${b.note}`) : null,
         editable ? h('button', { class: 'link', 'data-fid': `hnote-${bi}`, 'aria-label': `Notiz zu ${name} ${b.note ? 'bearbeiten' : 'hinzufügen'}`, onclick: () => A.editNote(bi) }, b.note ? 'Notiz bearbeiten' : 'Notiz hinzufügen') : null,
-        !b.skipped && series.points.length > 1 ? chart(series, names.exercise(b.exerciseId), { height: 90 }) : null);
+        !b.skipped && series.points.length > 1 ? chart(series, name, { height: 90 }) : null);
     }),
-    s.endedAt ? h('button', { class: 'btn danger', 'data-fid': 'delete-session', onclick: () => A.askDelete(s.id) }, 'Training löschen') : null,
+    canEdit ? h('button', { class: 'btn danger', 'data-fid': 'delete-session', onclick: () => A.askDelete(s.id) }, 'Training löschen') : null,
   ];
 }

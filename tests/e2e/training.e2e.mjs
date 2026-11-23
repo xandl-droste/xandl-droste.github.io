@@ -149,7 +149,7 @@ if (!(await page.getByText('Notiz: Korrigiert').count())) problems.push('Verlauf
 await btn(page, 'Training löschen', true).click();
 await shot('10-verlauf-loeschen');
 await btn(page, 'Ja, löschen', true).click();
-await page.getByText('Training gelöscht.').waitFor();
+await page.getByText('Training gelöscht.').first().waitFor();
 const countAfter = await page.locator('.list-item').count();
 if (countAfter !== 2) problems.push(`Verlauf nach dem Löschen: ${countAfter} Trainings (vorher 3)`);
 
