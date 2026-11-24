@@ -22,7 +22,7 @@ Veröffentlicht wird mit `develop` → `main` als Merge-Commit (README: GitHub P
 
 ## Offen
 
-### Version 3.0: andere Trainingsarten (übergeben 2026-11-24, noch nicht live)
+### Version 3.0: andere Trainingsarten (live seit 2026-11-24, Tag `v3.0.0`)
 
 Vorhaben: Trainings anderer Art (z. B. „Beachvolleyball · 90 min · RPE 6“) im selben Log wie die Krafttrainings. Ausgangspunkt: `docs/entwurf-2.0.md`, Abschnitt 2.4, und `docs/wishlist.md`. Der Betreiber arbeitet vom iPhone aus über die Claude-App mit einer Cloud-Sitzung.
 
@@ -57,9 +57,9 @@ Selbst getroffene Entscheidungen in Schritt 4: Zusammenfassung im Prompt als Spa
 
 Runde 7 (letzte für 3.0): keine kritischen oder hohen Findings, ein mittleres (iOS M-1: Anzeige nach ± bei fokussiertem Feld) und niedrige; behoben bzw. begründet in `reviews/umsetzung-r7.md`. `npm test` 211/211, `npm run e2e` grün (Chromium). `CHANGELOG.md` 3.0.0 ohne „in Arbeit“.
 
-**Übergabe ins öffentliche Repo (2026-11-24):** erledigt wie bei 2.0. Stand als ein Squash-Commit auf `feature/andere-trainingsarten` ab `develop`, eigene Commit-Nachricht ohne Zwischen-Commits und Session-Links, Repo- und Branchnamen des privaten Repos aus `docs/stand.md` und `reviews/` entfernt (Legal N6). Squash-Merge nach `develop`.
+**Übergabe ins öffentliche Repo (2026-11-24):** erledigt wie bei 2.0. Stand als ein Squash-Commit auf `feature/andere-trainingsarten` ab `develop`, eigene Commit-Nachricht ohne Zwischen-Commits und Session-Links, Repo- und Branchnamen des privaten Repos aus `docs/stand.md` und `reviews/` entfernt (Legal N6). Squash-Merge nach `develop`, Merge nach `main` (`a9aee38`), Tag `v3.0.0`, ausgeliefert.
 
-**Nächster Schritt:** Test am iPhone mit der Checkliste aus `reviews/ios-ux-r7.md` (besonders Punkt 1: Tippen und direkt danach tippen bzw. ±, Punkt 6: VoiceOver), danach `develop` → `main` als Merge-Commit und Tag `v3.0.0`.
+**Nächster Schritt:** Test am iPhone mit der Checkliste aus `reviews/ios-ux-r7.md` (besonders Punkt 1: Tippen und direkt danach tippen bzw. ±, Punkt 6: VoiceOver).
 
 ### Version 2.0 (live seit 2026-11-23, Tag `v2.0.0`)
 
