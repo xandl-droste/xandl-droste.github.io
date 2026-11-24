@@ -380,7 +380,14 @@ export function stepper({ label, unit, value, step, field, i, s, A, decimals }) 
     onfocus: (e) => { e.target.dataset.selectAll = '1'; selectAll(e.target); },
     onclick: (e) => { if (e.target.dataset.selectAll) { delete e.target.dataset.selectAll; selectAll(e.target); } },
   });
-  const bump = (d) => () => A.setValue(i, s, field, stepValue(value, d));
+  // Ausgangswert zum Zeitpunkt des Taps aus dem Feld lesen, nicht aus dem letzten Zeichnen: Nach dem Tippen eines Werts
+  // trifft der Tap noch den alten Button (Review r6 Code-Qualität H1 / iOS H-1).
+  // Danach das Feld verlassen, sonst schreibt render() den getippten Text wieder hinein (Review r7 iOS M-1).
+  const bump = (d) => () => {
+    const base = input.isConnected ? parseNum(input.value) : value;
+    if (document.activeElement === input) input.blur();
+    A.setValue(i, s, field, stepValue(base, d));
+  };
   const mid = h('div', { class: 'stp-mid' },
     input,
     h('label', { class: 'stp-label', for: id }, unit ? `${label} · ${unit}` : label));

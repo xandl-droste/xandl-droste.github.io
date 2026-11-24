@@ -105,7 +105,7 @@ test('neuer Plan behält die Historie und meldet unbekannte Übungen', () => {
 test('Zusammenfassung für die Vorschau', () => {
   assert.deepEqual(summarize({ plan }), { planName: plan.name, weeks: 7, planSessions: 2, exercises: 21, history: null });
   const s = summarize({ plan, sessions: [session({ date: '2026-03-05' }), session({ date: '2026-02-01' }), session({ ended: false })] });
-  assert.deepEqual(s.history, { count: 2, from: '2026-02-01', to: '2026-03-05' });
+  assert.deepEqual(s.history, { count: 2, activities: 0, from: '2026-02-01', to: '2026-03-05' });
 });
 
 test('Dateiname aus dem Plannamen ist sicher', () => {

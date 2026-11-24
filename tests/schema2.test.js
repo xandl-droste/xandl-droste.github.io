@@ -45,13 +45,12 @@ function finishExercise(live, i, now = T0) {
 
 // ---------- Validator ----------
 
-test('Schema 2: Major-Version 2, Dateien aus 1.x werden gelesen und auf 2 gehoben', () => {
-  assert.equal(SCHEMA_VERSION, 2);
+test('Schema 2: Dateien aus 1.x werden gelesen und auf die aktuelle Schemaversion gehoben', () => {
   const old = { ...createTrainingFile(plan, { now: T0 }), schemaVersion: 1 };
   delete old.createdAt;
   old.sessions = [session({ blocks: [block('back-squat', [[80, 5]])] })];
   const f = validateTrainingFile(JSON.parse(serialize(old)));
-  assert.equal(f.schemaVersion, 2);
+  assert.equal(f.schemaVersion, SCHEMA_VERSION);
   assert.equal(f.createdAt, undefined);
   assert.equal(f.sessions[0].blocks[0].name, undefined, 'Namen werden beim Lesen nicht erfunden');
 });

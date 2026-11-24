@@ -3,7 +3,7 @@
 
 import { h } from '../dom.js';
 import { fmtDay } from '../format.js';
-import { fileNameOf, summarize } from '../model/training-file.js';
+import { fileNameOf, summarize, historyCountText } from '../model/training-file.js';
 import { historyList, historyDetail } from './history.js';
 import { planSessionsDetail } from './plan.js';
 
@@ -68,9 +68,9 @@ function trainingCard(ar, activeFileId, A) {
     h('p', { class: 'mut small', 'data-fid': 'archive-file' }, `${ar.name}${ar.name !== fileNameOf(f) ? ` (gespeichert als ${fileNameOf(f)})` : ''}`),
     h('p', { class: 'mut small' }, [
       `${sum.weeks} Wochen · ${sum.planSessions} Einheiten`,
-      hist.count ? `${hist.count} ${hist.count === 1 ? 'Training' : 'Trainings'} (${fmtDay(hist.from)} bis ${fmtDay(hist.to)})` : 'keine Trainings',
+      historyCountText(hist) ? `${historyCountText(hist)} (${fmtDay(hist.from)} bis ${fmtDay(hist.to)})` : 'keine Trainings',
       f.progress.status === 'completed' ? 'abgeschlossen' : `zuletzt Woche ${f.progress.currentWeek}`,
-    ].join(' · ')),
+    ].filter(Boolean).join(' · ')),
     f.previous ? h('p', { class: 'mut small', 'data-fid': 'archive-previous' }, `Vorgänger: ${f.previous.planName} (${f.previous.fileName})`) : null,
     activeFileId && f.fileId === activeFileId
       ? h('p', { class: 'small' }, 'Das ist die aktive Trainingsdatei. Der Stand im Browser kann neuer sein als diese Datei.')

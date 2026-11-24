@@ -3,7 +3,7 @@
 import { h, svgEl } from '../dom.js';
 import { fmtDay, fmtNum, fmtRir as rirText, fmtRirTarget as rirTargetText } from '../format.js';
 import { backupText, sessionSaveState } from '../model/backup.js';
-import { nameIndex, endedSessions, sessionStats, exerciseSeries, exercisesWithHistory, chartGeometry, loggedUnit } from '../model/history.js';
+import { nameIndex, historyEntries, sessionStats, exerciseSeries, exercisesWithHistory, chartGeometry, loggedUnit } from '../model/history.js';
 
 /** „Woche 3“ bzw. ab dem zweiten Durchgang „Durchgang 2 · Woche 3“. */
 const weekLabel = (s) => ((s.cycle ?? 1) > 1 ? `Durchgang ${s.cycle} · Woche ${s.week}` : `Woche ${s.week}`);
@@ -79,31 +79,70 @@ function saveTag(state) {
  * readOnly (Archiv): ohne Überschrift „Verlauf“, ohne Sicherungs-Hinweise und -Tags.
  */
 export function historyList(file, backup, ui, A, { readOnly = false } = {}) {
-  const sessions = endedSessions(file);
+  const entries = historyEntries(file);
   const names = nameIndex(file.plan);
   const notice = readOnly ? null : backupText({ ...backup, remind: false });
   const title = readOnly ? h('h2', { class: 'section-title' }, 'Trainings') : h('h1', {}, 'Verlauf');
-  if (!sessions.length) {
-    return [title, h('section', { class: 'card' }, h('p', { class: 'mut' }, readOnly ? 'Die Datei enthält keine Trainings.' : 'Noch keine Trainings. Nach dem ersten Training erscheint es hier.'))];
+  // Nachtragen eines anderen Trainings (nicht im Archiv, nicht während eines laufenden Trainings).
+  const add = !readOnly && A.addActivity && ui.canAddActivity
+    ? h('button', { class: 'btn ghost', 'data-fid': 'hist-activity-add', onclick: A.addActivity }, 'Anderes Training eintragen')
+    : null;
+  if (!entries.length) {
+    return [title, h('section', { class: 'card' }, h('p', { class: 'mut' }, readOnly ? 'Die Datei enthält keine Trainings.' : 'Noch keine Trainings. Nach dem ersten Training erscheint es hier.')), add];
   }
   return [
     title,
+    add,
     notice ? h('section', { class: 'card' },
       h('p', { class: 'mut' }, notice),
       h('button', { class: 'btn ghost', onclick: A.exportAll }, 'Jetzt sichern')) : null,
     chartCard(file, ui, A),
     h('ul', { class: 'list', 'aria-label': 'Trainings' },
-      sessions.map((s) => {
+      entries.map(({ kind, item: s }) => {
+        if (kind === 'activity') return activityListItem(s, readOnly ? null : sessionSaveState(backup, s.id), A);
         const st = sessionStats(s);
         const state = readOnly ? null : sessionSaveState(backup, s.id);
         return h('li', {},
           h('button', { class: 'card list-item', 'data-fid': `sess-${s.id}`, onclick: () => A.openSession(s.id) },
             h('div', { class: 'row2' },
-              h('h3', {}, fmtDay(s.date)),
+              h('span', { class: 'list-title' }, fmtDay(s.date)),
               saveTag(state)),
             h('span', { class: 'mut' }, `${names.session(s.sessionKey)} · ${weekLabel(s)}`),
             h('span', { class: 'mut small' }, `${st.done} von ${st.total} Sätzen${st.minutes != null ? ` · ${st.minutes} Min` : ''}${s.rpe != null ? ` · RPE ${s.rpe}` : ''}`)));
       })),
+  ];
+}
+
+/** Listeneintrag eines anderen Trainings: Trainingsart statt Einheit, ohne Woche. */
+function activityListItem(a, state, A) {
+  return h('li', {},
+    h('button', { class: 'card list-item', 'data-fid': `sess-${a.id}`, onclick: () => A.openSession(a.id) },
+      h('div', { class: 'row2' },
+        h('span', { class: 'list-title' }, fmtDay(a.date)),
+        saveTag(state)),
+      h('span', { class: 'mut' }, a.type),
+      h('span', { class: 'mut small' }, `Anderes Training · ${a.durationMin} Min${a.rpe != null ? ` · RPE ${a.rpe}` : ''}`)));
+}
+
+/**
+ * Detailansicht eines anderen Trainings. Im Verlauf mit „Korrigieren“ (Sheet) und „Training löschen“,
+ * im Archiv (readOnly) nur lesen.
+ */
+function activityDetail(a, backup, A, { readOnly }) {
+  const state = readOnly ? null : sessionSaveState(backup, a.id);
+  return [
+    h('div', {}, h('button', { class: 'link back', 'data-fid': 'back', onclick: A.back }, readOnly ? '‹ Archiv' : '‹ Verlauf')),
+    h('h1', {}, `${fmtDay(a.date)} · ${a.type}`),
+    h('section', { class: 'card', 'aria-label': 'Anderes Training' },
+      h('div', { class: 'row2' },
+        h('span', { class: 'mut' }, `Anderes Training · ${a.durationMin} Min`),
+        saveTag(state)),
+      h('span', { class: a.rpe != null ? '' : 'mut' }, a.rpe != null ? `RPE ${a.rpe}` : 'Keine RPE'),
+      a.note ? h('p', { class: 'small' }, `Notiz: ${a.note}`) : null,
+      h('p', { class: 'mut small' }, `${a.week ? `Eingetragen in Woche ${a.week}. ` : ''}Zählt nicht für die Woche.`),
+      readOnly ? null : h('button', { class: 'btn ghost', 'data-fid': 'activity-edit', onclick: () => A.editActivity(a.id) }, 'Korrigieren'),
+      readOnly || state === 'saved' ? null : h('button', { class: 'btn ghost', onclick: A.exportAll }, 'Jetzt sichern')),
+    readOnly ? null : h('button', { class: 'btn danger', 'data-fid': 'delete-activity', onclick: () => A.askDeleteActivity(a.id) }, 'Training löschen'),
   ];
 }
 
@@ -119,6 +158,8 @@ function fmtLoggedSet(unit, set) {
  * kein Löschen, keine Sicherungs-Hinweise.
  */
 export function historyDetail(file, sessionId, backup, A, { readOnly = false } = {}) {
+  const act = (file.activities ?? []).find((x) => x.id === sessionId);
+  if (act) return activityDetail(act, backup, A, { readOnly });
   const s = file.sessions.find((x) => x.id === sessionId);
   if (!s) return [h('p', { class: 'mut' }, 'Training nicht gefunden.'), h('button', { class: 'btn ghost', onclick: A.back }, 'Zurück')];
   const names = nameIndex(file.plan);

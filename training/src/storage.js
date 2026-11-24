@@ -200,7 +200,7 @@ export async function listOtherFiles() {
   });
 }
 
-/** Eine nicht aktive Trainingsdatei aus dem Browser entfernen (die aktive nie). */
+/** Eine Trainingsdatei aus dem Browser entfernen. Aufrufer übergeben nie die aktive (siehe model/switch.js). */
 export function deleteFile(fileId) {
   return guardedWrite(['files'], (tx) => {
     tx.objectStore('files').delete(fileId);

@@ -47,6 +47,20 @@ export function endedSessions(file) {
     .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
 }
 
+/**
+ * Einträge für die Liste im Verlauf: beendete Krafttrainings und andere Trainings, neueste zuerst.
+ * Sortiert nach Datum, am selben Tag nach Beginn (Krafttraining) bzw. Zeitpunkt des Eintrags (anderes Training).
+ * @returns {{kind: 'session'|'activity', item: object}[]}
+ */
+export function historyEntries(file) {
+  const all = [
+    ...endedSessions(file).map((s) => ({ kind: 'session', item: s, date: s.date, at: Date.parse(s.startedAt) })),
+    ...(file.activities ?? []).map((a) => ({ kind: 'activity', item: a, date: a.date, at: Date.parse(a.createdAt) })),
+  ];
+  all.sort((x, y) => y.date.localeCompare(x.date) || y.at - x.at);
+  return all.map(({ kind, item }) => ({ kind, item }));
+}
+
 /** Kalendertage zwischen zwei Datumsangaben JJJJ-MM-TT (lokale Daten, unabhängig von Sommerzeit). */
 export function daysBetween(fromIso, toIso) {
   const utc = (iso) => {

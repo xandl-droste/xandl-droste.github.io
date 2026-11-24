@@ -15,11 +15,16 @@ export function backupStatus(file, lastExport, now = new Date()) {
   // Revision als Hauptkriterium. Zusätzlich updatedAt, falls die Revision an ihrer Obergrenze stehen bleibt.
   const unsavedChanges = !lastExport || file.revision > lastExport.revision
     || (file.revision === lastExport.revision && Date.parse(file.updatedAt) > exportedAt);
+  // Andere Trainings (ab Schema 3) zählen mit, maßgeblich ist der Zeitpunkt des Eintrags.
+  const activities = file.activities ?? [];
   const unsavedSessionIds = unsavedChanges
-    ? ended.filter((s) => exportedAt == null || Date.parse(s.endedAt) > exportedAt).map((s) => s.id)
+    ? [
+      ...ended.filter((s) => exportedAt == null || Date.parse(s.endedAt) > exportedAt).map((s) => s.id),
+      ...activities.filter((a) => exportedAt == null || Date.parse(a.createdAt) > exportedAt).map((a) => a.id),
+    ]
     : [];
   const daysSinceExport = exportedAt == null ? null : Math.floor((now.getTime() - exportedAt) / DAY_MS);
-  const hasData = ended.length > 0;
+  const hasData = ended.length > 0 || activities.length > 0;
   return {
     unsavedChanges: unsavedChanges && (hasData || file.revision > 0),
     unsavedSessionIds,

@@ -26,7 +26,7 @@ export function resolvePrescription(plan, exercise, week) {
   };
 }
 
-/** Alle Übungen einer Plan-Einheit in Reihenfolge, mit Block-Kontext. */
+/** Alle Übungen einer Einheit in Reihenfolge, mit Block-Kontext. */
 export function exercisesOf(planSession) {
   const out = [];
   planSession.blocks.forEach((block, blockIndex) => {
