@@ -73,7 +73,7 @@ function prescriptionOf(b) {
   return out;
 }
 
-/** Startet ein Training für eine Plan-Einheit in der aktuellen (oder angegebenen) Woche. */
+/** Startet ein Training für eine Einheit in der aktuellen (oder angegebenen) Woche. */
 export function startLive(file, sessionKey, { now = new Date(), id = newId(), week } = {}) {
   const ps = findPlanSession(file.plan, sessionKey);
   if (!ps) throw new Error(`Einheit ${sessionKey} nicht im Plan`);
@@ -208,13 +208,13 @@ export function updateSet(live, i, s, patch) {
   if (!set) return live;
   if ('kg' in patch) {
     const old = set.kg;
-    set.kg = clampOrNull(patch.kg, 0, 1000, 2);
+    set.kg = clampOrNull(patch.kg, 0, LIMITS.maxKg, 2);
     for (let k = s + 1; k < sets.length; k++) {
       if (!sets[k].done && (sets[k].kg == null || sets[k].kg === old)) sets[k].kg = set.kg;
     }
   }
-  if ('reps' in patch) set.reps = clampOrNull(patch.reps, 0, 1000, 0);
-  if ('sec' in patch) set.sec = clampOrNull(patch.sec, 0, 36000, 0);
+  if ('reps' in patch) set.reps = clampOrNull(patch.reps, 0, LIMITS.maxLoggedReps, 0);
+  if ('sec' in patch) set.sec = clampOrNull(patch.sec, 0, LIMITS.maxLoggedSec, 0);
   return next;
 }
 

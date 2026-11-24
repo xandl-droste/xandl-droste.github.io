@@ -21,7 +21,7 @@ async function finishOneSet(page, hiddenAfterMs = null) {
   if (hiddenAfterMs == null) return btn(page, 'Beenden und speichern').click();
   // App verlassen wenige Millisekunden nach „Beenden und speichern“.
   await page.evaluate((d) => {
-    document.querySelector('.sheet button.btn')?.click();
+    document.querySelector('[data-fid="finish-save"]')?.click();
     setTimeout(() => {
       Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
       document.dispatchEvent(new Event('visibilitychange'));

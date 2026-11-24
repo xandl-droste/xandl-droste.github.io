@@ -24,14 +24,17 @@ Grundregel: **Ein Begriff, eine Bedeutung.** Insbesondere heißt „Training“ 
 
 | Begriff | Englisch (im Gespräch) | Bedeutung | im Code |
 |---|---|---|---|
-| **Training** | workout | Eine tatsächlich absolvierte Einheit mit Datum, Dauer und Sätzen. | `sessions[]` (oberste Ebene) |
+| **Training** | workout | Oberbegriff: jedes tatsächlich absolvierte Training mit Datum und Dauer, entweder Krafttraining (nach einer Einheit, mit Sätzen) oder anderes Training. | `sessions[]`, `activities[]` |
 | **laufendes Training** | running workout | Ein begonnenes, noch nicht beendetes Training. Liegt nur im Browserspeicher. | `live` |
 | **Satz** | set | Ein protokollierter Satz: Gewicht, Wiederholungen oder Sekunden, erledigt ja/nein. Alle protokollierten Sätze sind Arbeitssätze, Aufwärmsätze werden nicht erfasst. | `sets[]` |
 | **letzter Satz** | last set | Der letzte Satz einer Übung in einem Training. Nur nach ihm wird bei Hauptübungen der RIR erfragt. | — |
 | **RIR** | RIR | Wiederholungen im Tank nach dem letzten Satz einer Hauptübung: 0, 1, 2, 3 oder 4+ (gespeichert als 4). | `rirLast` |
 | **RPE** | session RPE | Wie hart das ganze Training war, 0 bis 10. | `rpe` |
 | **Notiz** | note | Freitext. Es gibt die Notiz pro Übung und die Notiz pro Training. Wenn nicht klar ist, welche gemeint ist, immer dazusagen. | `blocks[].note`, `note` |
-| **Verlauf** | history | Alle Trainings eines Durchgangs (Tab „Verlauf“). | `sessions` |
+| **Krafttraining** | strength workout | Ein Training nach einer Einheit des Plans, mit Sätzen. Nur verwenden, wo der Unterschied zum anderen Training zählt. | `sessions[]` |
+| **anderes Training** | other workout | Ein Training ohne Einheit und ohne Sätze (z. B. Beachvolleyball): Trainingsart, Datum, Dauer, RPE, Notiz. Wird nachträglich eingetragen, zählt nicht für die Woche. Ab 3.0. | `activities[]` |
+| **Trainingsart** | workout type | Frei gewählter Name eines anderen Trainings, z. B. „Beachvolleyball“. | `activities[].type` |
+| **Verlauf** | history | Alle Trainings eines Durchgangs (Tab „Verlauf“), Krafttrainings und andere Trainings. | `sessions`, `activities` |
 
 ## Dateien und Durchgänge
 
@@ -66,6 +69,7 @@ Grundregel: **Ein Begriff, eine Bedeutung.** Insbesondere heißt „Training“ 
 
 ## Nicht verwenden
 
+- „Aktivität“, „activity“ in UI und Doku → **anderes Training** (im Code bleibt `activities`)
 - „Zyklus“, „cycle“ → **Durchgang**
 - „Session“ in UI und Doku → **Training** (im Code bleibt `sessions`)
 - „Training“ für die Datei → **Trainingsdatei**
