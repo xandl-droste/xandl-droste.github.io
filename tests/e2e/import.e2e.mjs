@@ -100,7 +100,7 @@ const [fc2] = await Promise.all([run2.page.waitForEvent('filechooser'), btn(run2
 await fc2.setFiles([exported]);
 await run2.shot('i06-vorschau-restore');
 const prev = await run2.page.locator('.sheet').textContent();
-if (!prev.includes('1 Trainings')) problems.push(`Vorschau ohne Trainingszahl: ${prev}`);
+if (!prev.includes('1 Training (')) problems.push(`Vorschau ohne Trainingszahl: ${prev}`);
 await btn(run2.page, 'Übernehmen').click();
 await btn(run2.page, 'Verlauf', true).click();
 await run2.shot('i07-verlauf-restore');

@@ -4,7 +4,7 @@
 
 import { resolvePrescription } from './plan.js';
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 /** Älteste Schemaversion, die noch gelesen wird. Gelesene Dateien werden auf SCHEMA_VERSION gehoben. */
 export const MIN_SCHEMA_VERSION = 1;
 
@@ -40,6 +40,9 @@ export const LIMITS = Object.freeze({
   maxRir: 4, // RIR nach dem letzten Satz: 0 bis 4 (4 = „4+“)
   maxFileName: 120,
   maxKeys: 200, // Schlüssel pro Objekt (bremst präparierte Dateien mit sehr vielen Feldern)
+  maxActivities: 2000, // andere Trainings in einer Trainingsdatei (ab Schema 3)
+  maxActivityType: 60, // Länge der Trainingsart
+  maxActivityMin: 600, // Dauer eines anderen Trainings in Minuten
 });
 
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
@@ -415,7 +418,7 @@ export function validatePlan(raw, path = 'plan') {
 
 const FILE_KEYS = [
   'schemaVersion', 'fileId', 'revision', 'updatedAt', 'createdAt', 'previous', 'carryOver',
-  'plan', 'settings', 'progress', 'sessions', 'deletedSessionIds',
+  'plan', 'settings', 'progress', 'sessions', 'activities', 'deletedSessionIds',
 ];
 const PREVIOUS_KEYS = ['fileId', 'fileName', 'planName'];
 const CARRY_KEYS = ['exerciseId', 'date', 'variantId', 'plannedSets', 'repsMax', 'durationSec', 'sets', 'note'];
@@ -425,6 +428,24 @@ const LOGGED_BLOCK_KEYS = [
   'exerciseId', 'name', 'variantId', 'variantName', 'sets', 'note', 'skipped', 'rirLast', 'plannedSets', 'repsMax', 'durationSec',
 ];
 const SET_KEYS = ['kg', 'reps', 'sec', 'done', 'doneAt'];
+/**
+ * Zeichen, die in der Trainingsart nicht vorkommen dürfen: Steuerzeichen, Formatzeichen (u. a. Bidi, Nullbreite,
+ * Tag-Zeichen), Zeilen- und Absatztrenner, standardmäßig unsichtbare Zeichen (u. a. Variantenwähler, Hangul-Füller)
+ * und das leere Braille-Muster (Review r5 Security N2, r6 Security N2). Eine Stelle für Modell und Validator.
+ */
+// Dazu (Review r7 Security N2): private Zeichen (Co), einzelne Surrogate (Cs) und Nichtzeichen.
+const INVISIBLE_CLASS = '\\p{Cc}\\p{Cf}\\p{Co}\\p{Cs}\\p{Zl}\\p{Zp}\\p{Default_Ignorable_Code_Point}\\p{Noncharacter_Code_Point}\\u2800';
+export const INVISIBLE_RE = new RegExp(`[${INVISIBLE_CLASS}]`, 'gu');
+// Außerdem darf die Trainingsart nicht mit einem Kombinationszeichen ohne Grundzeichen beginnen.
+const ACTIVITY_TYPE_RE = new RegExp(`^(?!\\p{M})[^${INVISIBLE_CLASS}]*$`, 'u');
+
+/** Trainingsart wie in der App: ohne unsichtbare Zeichen, ohne Leerraum am Rand, Leerraum innen als ein Leerzeichen. */
+export const cleanActivityType = (t) => String(t ?? '').replace(INVISIBLE_RE, ' ').trim().replace(/\s+/g, ' ').replace(/^\p{M}+/u, '').trim();
+
+/** Andere Trainings: nach Datum, am selben Tag nach dem Zeitpunkt des Eintrags (eine Stelle für App und Validator). */
+export const byActivityDate = (a, b) => a.date.localeCompare(b.date)
+  || Date.parse(a.createdAt) - Date.parse(b.createdAt) || a.id.localeCompare(b.id);
+const ACTIVITY_KEYS = ['id', 'date', 'type', 'durationMin', 'rpe', 'note', 'week', 'createdAt'];
 
 function isoField(ctx, o, key, path, { required, nullable }) {
   const v = field(ctx, o, key, path, { type: 'string', required, nullable, max: 40, pattern: ISO_RE, patternMsg: 'Zeitstempel im Format ISO-8601 erwartet' });
@@ -563,6 +584,36 @@ function validateCarryOver(ctx, raw, path) {
   });
 }
 
+/**
+ * Ein anderes Training (ab Schema 3): Trainingsart, Datum, Dauer, RPE und Notiz, ohne Einheit und ohne Sätze.
+ * week ist die Planwoche beim Eintragen, nur zur Einordnung (zählt nicht für die Woche).
+ */
+function validateActivity(ctx, raw, path) {
+  if (!expectObject(ctx, raw, path, ACTIVITY_KEYS)) return undefined;
+  const a = {};
+  setIf(a, 'id', field(ctx, raw, 'id', path, { type: 'string', required: true, max: 64, pattern: SESSION_ID_RE, patternMsg: 'ungültige ID' }));
+  setIf(a, 'date', dateField(ctx, raw, 'date', path, { required: true }));
+  const type = field(ctx, raw, 'type', path, { type: 'string', required: true, max: LIMITS.maxActivityType, pattern: ACTIVITY_TYPE_RE, patternMsg: 'enthält Steuer- oder unsichtbare Zeichen' });
+  // Wie in der App bereinigt, damit Vorschläge und „Korrigieren ohne Änderung“ gleich arbeiten (Review r6 Code-Qualität N2).
+  if (type !== undefined) a.type = cleanActivityType(type);
+  setIf(a, 'durationMin', field(ctx, raw, 'durationMin', path, { type: 'int', required: true, min: 1, max: LIMITS.maxActivityMin }));
+  setIf(a, 'rpe', field(ctx, raw, 'rpe', path, { type: 'int', min: 0, max: LIMITS.maxRpe }));
+  const note = field(ctx, raw, 'note', path, { type: 'string', max: LIMITS.maxNote, nonEmpty: false });
+  if (note) a.note = note;
+  setIf(a, 'week', field(ctx, raw, 'week', path, { type: 'int', min: 1, max: LIMITS.maxWeeks }));
+  setIf(a, 'createdAt', isoField(ctx, raw, 'createdAt', path, { required: true }));
+  return a;
+}
+
+/** Prüft ein einzelnes anderes Training (z. B. aus dem Eingabe-Sheet), wirft ValidationError. */
+export function validateActivityEntry(raw) {
+  const ctx = new Ctx();
+  if (raw === null || typeof raw !== 'object') ctx.err('activity', 'fehlt');
+  const a = ctx.errors.length ? undefined : validateActivity(ctx, raw, 'activity');
+  ctx.throwIfErrors();
+  return a;
+}
+
 /** Prüft eine einzelne protokollierte Session (z. B. das laufende Training aus dem Browserspeicher). */
 export function validateSession(raw) {
   const ctx = new Ctx();
@@ -573,8 +624,8 @@ export function validateSession(raw) {
 }
 
 /**
- * Validiert eine komplette .training.json (Schema 1 oder 2). Wirft ValidationError, sonst bereinigte Kopie.
- * Die Kopie hat immer schemaVersion = SCHEMA_VERSION: Schema 2 ergänzt nur optionale Felder.
+ * Validiert eine komplette .training.json (Schema 1 bis 3). Wirft ValidationError, sonst bereinigte Kopie.
+ * Die Kopie hat immer schemaVersion = SCHEMA_VERSION: Schema 2 und 3 ergänzen nur optionale Felder.
  */
 export function validateTrainingFile(raw) {
   const ctx = new Ctx();
@@ -628,6 +679,25 @@ export function validateTrainingFile(raw) {
       }
       f.sessions.push(v);
     });
+  }
+
+  // Andere Trainings (ab Schema 3, optional). IDs teilen sich mit den Trainings deletedSessionIds und müssen daher
+  // über beide Listen eindeutig sein.
+  if (has(raw, 'activities') && expectArray(ctx, raw.activities, 'activities', { max: LIMITS.maxActivities })) {
+    const ids = new Set(f.sessions.map((s) => s?.id).filter(Boolean));
+    f.activities = raw.activities.map((a, i) => {
+      const v = validateActivity(ctx, a, `activities[${i}]`);
+      if (v?.id) {
+        if (ids.has(v.id)) ctx.err(`activities[${i}].id`, `"${v.id}" ist doppelt`);
+        ids.add(v.id);
+      }
+      return v;
+    });
+    // Wie in der App: nach Datum, am selben Tag nach Eintrag. Eine leere Liste entfällt (Review r5 Code-Qualität N3).
+    if (!ctx.errors.length) {
+      f.activities.sort(byActivityDate);
+      if (!f.activities.length) delete f.activities;
+    }
   }
 
   // IDs gelöschter Trainings, damit sie beim Zusammenführen mit älteren Dateien nicht zurückkommen.

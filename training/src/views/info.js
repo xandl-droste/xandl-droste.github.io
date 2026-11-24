@@ -14,7 +14,7 @@ export function infoScreen(onBack) {
     h('h1', {}, 'Info, Impressum & Datenschutz'),
     h('section', { class: 'card info' },
       h('h2', {}, 'Zweck dieser Seite'),
-      h('p', {}, 'Diese Web-App ist ein rein privates, nicht kommerzielles Projekt zum persönlichen Protokollieren von Krafttraining. Mit der Seite werden keine wirtschaftlichen, politischen, weltanschaulichen oder sonstigen Interessen verfolgt. Es gibt keine Werbung, keine Verkaufsangebote, keine Spendenaufrufe und keine redaktionellen Inhalte.')),
+      h('p', {}, 'Diese Web-App ist ein rein privates, nicht kommerzielles Projekt zum persönlichen Protokollieren von Krafttraining und anderen Trainings. Mit der Seite werden keine wirtschaftlichen, politischen, weltanschaulichen oder sonstigen Interessen verfolgt. Es gibt keine Werbung, keine Verkaufsangebote, keine Spendenaufrufe und keine redaktionellen Inhalte.')),
     h('section', { class: 'card info' },
       h('h2', {}, 'Betreiber / Offenlegung (§ 25 MedienG)'),
       h('p', {}, `Medieninhaber und Betreiber: ${NAME}, ${WOHNORT}, Österreich. Kontakt: `, mail())),

@@ -31,9 +31,16 @@ iOS kann Browserdaten löschen (z. B. bei Speichermangel oder wenn eine Web-App 
 - **Neuer Plan bei vorhandener Trainingsdatei:** Beim Öffnen einer `plan.json` wählen: „Anpassen“ (gleiche Trainingsdatei, gleiche Woche), „Nachfolger“ (neue Trainingsdatei ab Woche 1, die letzten Gewichte werden übernommen) oder „Ganz neu“. Die Zuordnung läuft über die Übungs-IDs.
 - **Hauptübungen:** Pläne können Übungen mit `"main": true` markieren. Nach deren letztem Satz fragt die App nach dem RIR (Wiederholungen im Tank). Das Feld setzt der KI-Agent, die App ändert den Plan nie.
 
+## Andere Trainings
+
+- **Heute oder Verlauf → „Anderes Training eintragen“:** z. B. Beachvolleyball, Laufen oder Mobility nachträglich mit Trainingsart, Datum, Dauer, RPE und Notiz festhalten (ab Version 3.0). Eingetippte Trainingsarten werden beim nächsten Mal vorgeschlagen.
+- Andere Trainings stehen im Verlauf, im Archiv und im Export für Coach. Der Prompt „Mit Plan und letzten Ergebnissen“ fasst die letzten 4 Wochen zusammen, damit der KI-Agent die Belastung einplanen kann.
+- Sie zählen nicht für die Woche und ändern keine Gewichte. Kein Timer, kein Garmin-Export: Das macht die Uhr.
+- Dateien aus 3.0 lassen sich mit älteren App-Versionen nicht öffnen. Die App aktualisiert sich nach dem nächsten Start von selbst.
+
 ## Export für Coach und Archiv
 
-- **Plan → „Export für Coach“:** schlanker Text mit Plan und allen Trainings der aktiven Trainingsdatei (inkl. RIR, RPE und Notizen) für einen KI-Coach, als `.md`-Datei teilen oder kopieren. Die Daten gehen an den Anbieter des KI-Dienstes.
+- **Plan → „Export für Coach“:** schlanker Text mit Plan und allen Trainings der aktiven Trainingsdatei (inkl. RIR, RPE, Notizen und anderer Trainings) für einen KI-Coach, als `.md`-Datei teilen oder kopieren. Die Daten gehen an den Anbieter des KI-Dienstes.
 - **Archiv:** eine ältere Trainingsdatei oder Plandatei nur ansehen (Trainings, Graphen, Plan), ohne den aktiven Plan zu ändern. Auch dort gibt es Export für Coach und Garmin-Export. Die Datei wird nicht im Browser gespeichert.
 - Ungültige Dateien werden nie halb übernommen. Die Fehlermeldung nennt die Stelle, z. B. `plan.sessions[1].blocks[2].exercises[0]: repsMax fehlt`.
 
@@ -99,7 +106,7 @@ training/                 die App (wird so ausgeliefert)
   src/garmin/             FIT-Encoder und Garmin-Export
   src/legal.js            Betreiberangaben (nur hier pflegen)
 tests/                    Unit-Tests, tests/e2e/ Browser-Prüfungen, tests/fixtures/ Beispielplan (nur für Tests, wird nicht ausgeliefert)
-docs/                     Spezifikation, Arbeitsstand, Prototyp (nur visuelle Vorlage)
+docs/                     Spezifikation, Arbeitsstand, Wunschliste, Prototyp (nur visuelle Vorlage)
 ```
 
 ## Sicherheit beim Hosting

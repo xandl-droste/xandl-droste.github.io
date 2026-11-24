@@ -22,7 +22,46 @@ Veröffentlicht wird mit `develop` → `main` als Merge-Commit (README: GitHub P
 
 ## Offen
 
-### In Arbeit: Version 2.0 (Stand 2026-11-23)
+### Version 3.0: andere Trainingsarten (übergeben 2026-11-24, noch nicht live)
+
+Vorhaben: Trainings anderer Art (z. B. „Beachvolleyball · 90 min · RPE 6“) im selben Log wie die Krafttrainings. Ausgangspunkt: `docs/entwurf-2.0.md`, Abschnitt 2.4, und `docs/wishlist.md`. Der Betreiber arbeitet vom iPhone aus über die Claude-App mit einer Cloud-Sitzung.
+
+
+**Ablauf wie bei 2.0:**
+
+1. Entwurf `docs/entwurf-<name>.md` mit offenen Fragen, mit dem Betreiber abstimmen, Entscheidungen eintragen. Erst danach Code.
+2. Neue Begriffe (z. B. für die Art eines Trainings) zuerst in `docs/begriffe.md` festlegen.
+3. Versionsfrage im Entwurf klären: Der Validator von 2.0 lehnt unbekannte Felder ab. Sind neue Trainingsdateien für 2.0 nicht lesbar, ist es laut `CLAUDE.md` ein Major-Sprung (3.0.0, `SCHEMA_VERSION` 3), sonst 2.1.0.
+4. Umsetzung in Schritten, jeder mit Tests (`npm test` grün), nach jedem Schritt committen, pushen und diesen Abschnitt nachführen.
+5. Zum Schluss Spezifikation, README, `CHANGELOG.md`, `npm run sw`, Browser-Prüfung, danach Reviews (Spezifikation Abschnitt 9).
+
+**Erledigt:** Entwurf `docs/entwurf-andere-trainingsarten.md` mit zwölf offenen Fragen (F1–F12, Übersicht in Abschnitt 8, je mit Vorschlag). Kernvorschläge: eigenes Feld `activities[]` neben `sessions[]`, nur nachträglich eintragen (Trainingsart, Datum, Dauer, RPE, Notiz), zählt nicht für Woche und Progression, erscheint in Verlauf, Archiv, Coach-Export und zusammengefasst im Agent-Prompt, kein Garmin-Export, Version 3.0.0.
+
+**Abgestimmt (Betreiber, 2026-11-23):** alle Vorschläge F1–F12 angenommen, eingetragen in Abschnitt 9 des Entwurfs. Neue Begriffe („Krafttraining“, „anderes Training“, „Trainingsart“) stehen in `docs/begriffe.md`.
+
+| Schritt (Entwurf Abschnitt 7) | Stand |
+|---|---|
+| 1 Begriffe, Datenmodell Schema 3 | erledigt: `SCHEMA_VERSION` 3, Version 3.0.0, `CHANGELOG.md` „in Arbeit“. Validator für `activities` (Grenzen `maxActivities` 2000, `maxActivityType` 60, `maxActivityMin` 600), IDs über Trainings und andere Trainings eindeutig. Neues Modul `training/src/model/activities.js` (eintragen, korrigieren, löschen, Vorschläge). Merge in `mergeTrainingFiles`. Tests `tests/activities.test.js`, `npm test` 194/194 |
+| 2 UI: Sheet „Anderes Training eintragen“, Button im Heute-Tab und im Verlauf | erledigt: `training/src/views/activity.js` (Trainingsart mit Vorschlag-Chips, Datum als Datumsfeld bis heute, Dauer-Stepper ±5 ab 60 min, RPE-Regler, Notiz, Fehlermeldungen vor dem Speichern). Karte „Anderes Training eintragen“ im Heute-Tab, Button oben im Verlauf, beides nicht während eines laufenden Trainings. Backup-Status zählt andere Trainings als ungesichert. Neuer Browser-Test `tests/e2e/anderes-training.e2e.mjs` (auch in `npm run e2e`). `npm test` 196/196 |
+| 3 Verlauf und Archiv: gemischte Liste, Detailansicht mit Korrektur und Löschen | erledigt: `historyEntries` in `model/history.js` (Krafttrainings und andere Trainings, neueste zuerst). Listeneintrag mit Trainingsart und „Anderes Training · 65 Min · RPE 6“, Sicherungs-Tag wie bei Trainings. Detailansicht mit Dauer, RPE, Notiz, Woche des Eintrags; im Verlauf „Korrigieren“ (Sheet mit vorbelegten Werten) und „Training löschen“ mit Rückfrage, im Archiv nur lesen. Archiv-Kopf zählt andere Trainings mit. Browser-Test erweitert. `npm test` 197/197 |
+| 4 Coach-Export und Agent-Prompt | erledigt: Coach-Export mischt andere Trainings ins Log („2026-11-18 Beachvolleyball · W3 · 90 min · RPE 6“, Notiz darunter), Legende mit Zusatz nur bei vorhandenen anderen Trainings. Agent-Prompt: `activitySummaryLines` (letzte 4 Wochen bis heute, pro Trainingsart Anzahl, Dauer- und RPE-Spanne, Trainingsart als JSON-Text, Backticks maskiert), eigener Codeblock nach den letzten Ergebnissen, nur mit Plan. Button „Mit Plan und letzten Ergebnissen kopieren“ erscheint auch, wenn es nur andere Trainings gibt; Datenschutz-Hinweis nennt sie. `npm test` 199/199 |
+| 5 Spezifikation, README, CHANGELOG, `npm run sw`, Browser-Prüfung, Reviews | Doku erledigt (Spezifikation: Datenmodell, Heute, Sheet, Verlauf, Coach-Export, Agent-Prompt, Nicht-Ziele, Prüfumfang Abschnitt 9; README „Andere Trainings“; CHANGELOG 3.0.0 weiter „in Arbeit“). `npm test` 199/199, `npm run e2e` grün (Chromium). Review Runde 5: ein hohes Finding (iOS H-1, erster Tap nach dem Tippen geht mit Touch verloren, betraf auch „Satz fertig“), vier mittlere; alle behoben, Antworten in `reviews/umsetzung-r5.md`. `npm test` 205/205, `npm run e2e` grün. Runde 6: ein hohes Finding (Code-Qualität H1 / iOS H-1: −/+ direkt nach dem Tippen rechnete vom alten Wert, Folge des Fixes aus Runde 5), sonst nur niedrige; alles behoben bzw. begründet in `reviews/umsetzung-r6.md`. `npm test` 207/207, `npm run e2e` grün. Es folgt Runde 7, für 3.0 die dritte und letzte. Entscheidungen des Betreibers (2026-11-24): Zweckangabe auf der Info-Seite lautet jetzt „… zum persönlichen Protokollieren von Krafttraining und anderen Trainings“ (Legal r5 N1, auch Spezifikation Abschnitt 6). Verweise auf das private Repo (Repo- und Branchnamen) werden vor der Übergabe auch aus den Berichten in `reviews/` entfernt; das geht der Regel „Berichte nicht umschreiben“ vor (Legal r6 N5) |
+
+Selbst getroffene Entscheidungen in Schritt 1: Das Feld `activities` fehlt in der Datei, solange es keine anderen Trainings gibt (auch nach dem Löschen des letzten). Gelöschte andere Trainings nutzen `deletedSessionIds` mit, deshalb müssen IDs über beide Listen eindeutig sein. Beim Zusammenführen zählen andere Trainings in „Training(s) zusammengeführt“ mit (beides sind Trainings laut `docs/begriffe.md`). Trainingsart: Leerzeichen am Rand entfernt, mehrfache Leerzeichen zu einem. Vorschläge ohne Unterschied von Groß- und Kleinschreibung, angezeigt in der zuletzt verwendeten Schreibweise. Datum in der Zukunft lehnt das Modell ab (nicht der Validator, der kennt das heutige Datum nicht). `updateActivity` lässt die Woche beim Ändern des Datums unverändert.
+
+Selbst getroffene Entscheidungen in Schritt 2: Die Karte im Heute-Tab steht unter der nächsten Einheit (bzw. unter „Plan abgeschlossen“) und über dem Backup, mit einer Zeile Erklärung. Dauer startet bei 60 min, Schritt 5 min. Betreiber: Der große Stepper aus dem Training war im Sheet zu wuchtig, ersetzt durch ein kompaktes Feld „Dauer (Minuten)“ mit −/+ in Feldhöhe (44 px). Danach auf Wunsch Datum und Dauer nebeneinander (unter 340 px Breite untereinander). (Das in Schritt 2 vorbereitete „Löschen“ im Sheet ist in Schritt 3 wieder entfallen, gelöscht wird in der Detailansicht.) Toast nach dem Speichern: „<Trainingsart> eingetragen.“ Nebenbei behoben: Lange Wörter ohne Leerzeichen in Überschriften (z. B. ein Planname) verbreiterten die Seite, dann rutschte die Tab-Leiste aus dem Bild (aufgefallen im Import-Test mit präpariertem Plan, sichtbar erst durch die zusätzliche Karte). Jetzt `overflow-wrap: anywhere` für h1 bis h3. `npm run e2e` komplett grün (Chromium). Im Sheet der Hinweis „Zählt nicht für die Woche und ändert keine Gewichte im Plan.“
+
+Selbst getroffene Entscheidungen in Schritt 3: Korrigieren läuft über dasselbe Sheet wie das Eintragen (Titel „Anderes Training korrigieren“), Löschen nur in der Detailansicht, nicht im Sheet. Reihenfolge am selben Tag: Krafttraining nach Beginn, anderes Training nach dem Zeitpunkt des Eintrags. Der Archiv-Kopf sagt „Krafttrainings“ nur, wenn die Datei auch andere Trainings enthält, sonst wie bisher „Trainings“. Der Verlaufsgraph pro Übung bleibt unverändert, andere Trainings haben keinen.
+
+Selbst getroffene Entscheidungen in Schritt 4: Zusammenfassung im Prompt als Spannen statt „meist 90 min“ (z. B. `"Beachvolleyball": 7× · 60–90 min · RPE 5–7`), weil Spannen eindeutig sind. Der Prompt bittet die KI, die Belastung bei Umfang und Verteilung zu berücksichtigen, die anderen Trainings aber nicht in den Plan aufzunehmen. Notizen anderer Trainings gehen nicht in den Prompt (wie bei den Ergebnissen), nur in den Coach-Export.
+
+Runde 7 (letzte für 3.0): keine kritischen oder hohen Findings, ein mittleres (iOS M-1: Anzeige nach ± bei fokussiertem Feld) und niedrige; behoben bzw. begründet in `reviews/umsetzung-r7.md`. `npm test` 211/211, `npm run e2e` grün (Chromium). `CHANGELOG.md` 3.0.0 ohne „in Arbeit“.
+
+**Übergabe ins öffentliche Repo (2026-11-24):** erledigt wie bei 2.0. Stand als ein Squash-Commit auf `feature/andere-trainingsarten` ab `develop`, eigene Commit-Nachricht ohne Zwischen-Commits und Session-Links, Repo- und Branchnamen des privaten Repos aus `docs/stand.md` und `reviews/` entfernt (Legal N6). Squash-Merge nach `develop`.
+
+**Nächster Schritt:** Test am iPhone mit der Checkliste aus `reviews/ios-ux-r7.md` (besonders Punkt 1: Tippen und direkt danach tippen bzw. ±, Punkt 6: VoiceOver), danach `develop` → `main` als Merge-Commit und Tag `v3.0.0`.
+
+### Version 2.0 (live seit 2026-11-23, Tag `v2.0.0`)
 
 Vorhaben: Hauptübungen, RIR, RPE und Notiz pro Training, Coach-Export, eine Trainingsdatei pro Durchgang, Archiv. Abgestimmter Entwurf: `docs/entwurf-2.0.md`. Begriffe: `docs/begriffe.md`.
 
@@ -43,7 +82,7 @@ Selbst getroffene Entscheidungen in Schritt 5: Das Archiv zeigt den Plan ab der 
 
 Selbst getroffene Entscheidungen in Schritt 4: Ungesicherte ältere Trainingsdateien werden nicht nach dem ersten Angebot gelöscht, sondern bei jedem Start wieder angeboten, bis sie gesichert oder ausdrücklich verworfen sind (sonst ginge Ungesichertes verloren). Eine eben aus einer Datei geöffnete Trainingsdatei gilt als gesichert. `startNewCycle` bleibt im Modell (alte Tests), die App nutzt es nicht mehr. Alte Dateien mit mehreren Durchgängen zeigen weiter „Durchgang N“.
 
-**Übergabe ins öffentliche Repo (2026-11-23):** erledigt. Stand per `git merge --squash` als ein Commit auf `feature/version-2` ab `develop`, eigene Commit-Nachricht ohne Zwischen-Commits und Session-Links, Hinweis auf das private Repo entfernt (Legal N6).
+**Übergabe ins öffentliche Repo (2026-11-23):** erledigt. Stand per `git merge --squash` als ein Commit auf `feature/version-2` ab `develop`, eigene Commit-Nachricht ohne Zwischen-Commits und Session-Links, Hinweis auf das private Repo entfernt (Legal N6). Squash-Merge nach `develop`, Merge nach `main`, Tag `v2.0.0`, ausgeliefert.
 
 **Nächster Schritt:** Test am iPhone mit der Checkliste aus `reviews/ios-ux-r4.md` (besonders Punkt 4: RPE-Regler).
 
@@ -58,16 +97,15 @@ Browser-Prüfungen in der Cloud-Sitzung: Playwright ist vorinstalliert unter `/o
 
 ### Nächste Schritte
 
-1. Rückmeldungen des Betreibers aus dem Test im Studio umsetzen. Erste Runde (nach der ersten Testfahrt): Warm-up bleibt offen, keine Pause nach dem letzten Satz, Liste scrollt zum aktuellen Satz, Auswahl im Verlauf öffnet sich unter iOS nicht neu, nur noch ein Abschluss-Knopf, Umschalter Liste/Fokus in der Pausenleiste. Reviews dazu: `reviews/testfahrt-*.md` (keine kritischen oder hohen Findings; mittlere behoben). Beim nächsten Training prüft der Betreiber: ob beim Hüftbeuger „Halten starten“ da ist, die iPhone-Checkliste in `reviews/testfahrt-ios-ux.md`. Zurückgestellt: Klimmzug unterstützt/frei als Variante im Plan (Garmin `bandAssistedPullUp`, ohne Gewicht).
+1. Rückmeldungen des Betreibers aus dem Test im Studio umsetzen. Erste Runde (nach der ersten Testfahrt): Warm-up bleibt offen, keine Pause nach dem letzten Satz, Liste scrollt zum aktuellen Satz, Auswahl im Verlauf öffnet sich unter iOS nicht neu, nur noch ein Abschluss-Knopf, Umschalter Liste/Fokus in der Pausenleiste. Reviews dazu: `reviews/testfahrt-*.md` (keine kritischen oder hohen Findings; mittlere behoben). Beim nächsten Training prüft der Betreiber: ob beim Hüftbeuger „Halten starten“ da ist, die iPhone-Checkliste in `reviews/testfahrt-ios-ux.md`. Zurückgestellt (jetzt in `docs/wishlist.md`): Klimmzug unterstützt/frei als Variante im Plan.
 2. Offene Punkte aus Runde 3 (in `reviews/umsetzung-r3.md` als „später“ oder „Entscheidung Betreiber“ markiert).
 
-### Offen beim Betreiber
+### Wunschliste
 
-- **Querformat im Fokus-Modus:** Dort muss man weiter scrollen, um „Satz fertig“ und den Timer zu sehen. Ein zweispaltiges Layout ist möglich, bisher aber nicht beauftragt (die Spezifikation verlangt Hochformat).
+Feature-Ideen und zurückgestellte Review-Punkte stehen gesammelt in `docs/wishlist.md` (u. a. Querformat im Fokus-Modus, Klimmzug mit Unterstützung, alte Trainingsstände löschbar).
 
 ### Später
 
-- Alte Trainingsstände im Menü löschbar machen (Security N9).
 - Auf dem echten iPhone prüfen (Schritt 9): Signalton nach einem Tap, nach Rückkehr aus dem Hintergrund und mit Stummschalter; Kopieren des Prompts mit Ergebnissen.
 - Nach dem Deploy (https) auf dem iPhone prüfen: Teilen-Menü in Safari und Chrome für `.training.json` (Ersetzen statt „(1)“) und `.fit`. Erledigt laut Betreiber: Halte-Countdown mit Seitenwechsel, Gewichts-Buttons mit feuchten Fingern, Garmin-Export und Import in Connect.
 - Checkliste für das echte iPhone: `reviews/ios-ux-r2.md`, Abschnitt „Checkliste“.

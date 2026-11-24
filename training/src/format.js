@@ -69,7 +69,8 @@ export function fmtDay(isoDate) {
 
 /** Eingabe mit Komma oder Punkt in eine Zahl umwandeln, sonst null. */
 export function parseNum(text) {
-  const t = String(text ?? '').trim().replace(',', '.');
+  // Leerraum (auch der Tausendertrenner von fmtNum, ein geschütztes Leerzeichen) zählt nicht (Review r7 Code-Qualität N1).
+  const t = String(text ?? '').replace(/[\s\u00A0\u202F]/g, '').replace(',', '.');
   if (t === '') return null;
   const n = Number(t);
   return Number.isFinite(n) ? n : null;

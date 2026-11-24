@@ -1,4 +1,4 @@
-// Wochen-Ableitung: Eine Woche ist fertig, wenn alle Plan-Einheiten dieser Woche absolviert sind.
+// Wochen-Ableitung: Eine Woche ist fertig, wenn alle Einheiten dieser Woche absolviert sind.
 // Es zählen nur Sessions des aktuellen Durchgangs (progress.cycle), die nach progress.repeatFrom begonnen wurden
 // und bei denen mindestens die Hälfte der Sätze erledigt ist.
 
@@ -102,7 +102,7 @@ export function currentWeekComplete(file) {
   return isWeekComplete(file.plan, file.sessions, file.progress.currentWeek, scopeOf(file.progress));
 }
 
-/** Nächste offene Plan-Einheit der aktuellen Woche (sonst die erste). */
+/** Nächste offene Einheit der aktuellen Woche (sonst die erste). */
 export function nextPlanSession(file) {
   const { plan, sessions, progress } = file;
   const done = doneKeys(sessions, progress.currentWeek, scopeOf(progress));

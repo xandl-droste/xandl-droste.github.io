@@ -8,8 +8,8 @@ if (window.top !== window.self) {
 
 import { h, icon } from './dom.js';
 import { fmtNum } from './format.js';
-import { parseImportText, ValidationError, validateTrainingFile, validateSession } from './model/validate.js';
-import { createTrainingFile, bumpRevision, fileNameOf, themeFor, deleteSession } from './model/training-file.js';
+import { parseImportText, ValidationError, validateTrainingFile, validateSession, LIMITS, cleanActivityType } from './model/validate.js';
+import { createTrainingFile, bumpRevision, fileNameOf, themeFor, deleteSession, historyCountText } from './model/training-file.js';
 import { findPlanSession, estimateMinutes } from './model/plan.js';
 import { nextPlanSession, setCurrentWeek, repeatWeek, countsAsUnitDone, doneShare, cycleOf } from './model/weeks.js';
 import { createSuccessorFile } from './model/carry-over.js';
@@ -26,10 +26,12 @@ import { liveView, steppersFor, holdLabel, holdSeconds, lastNoteText, RIR_VALUES
 import { unlockAudio, beep, DEFAULT_SOUND } from './sound.js';
 import { historyList, historyDetail } from './views/history.js';
 import { rpeSlider } from './views/rpe.js';
+import { activityDraft, activityDraftError, activitySheetBody } from './views/activity.js';
+import { addActivity, updateActivity, deleteActivity, activityTypeSuggestions, activitiesOf } from './model/activities.js';
 import { archiveScreen } from './views/archive.js';
 import { planScreen as planView } from './views/plan.js';
 import { infoScreen } from './views/info.js';
-import { buildAgentPrompt, resultLines } from './agent-prompt.js';
+import { buildAgentPrompt, resultLines, activitySummaryLines } from './agent-prompt.js';
 import { readImportFiles, previewImport, applyImports, overlapText } from './model/import.js';
 import { buildCoachExport, coachExportFileName } from './model/coach-export.js';
 import { fmtClock, fmtSet, fmtDay } from './format.js';
@@ -63,6 +65,7 @@ const S = {
   finishInput: null, // { liveId, rpe, note } Eingaben im Dialog „Training beenden?“ (nur im Speicher)
   loadProblem: null, // Hinweis beim Start, wenn der gespeicherte Stand nicht passte
   archive: null, // im Archiv geöffnete Datei (nur im Speicher, nur lesen), siehe views/archive.js
+  activityDraft: null, // Eingaben im Sheet „Anderes Training“ (nur im Speicher), siehe views/activity.js
 };
 
 // Ansagen für Screenreader: eine dauerhafte Live-Region außerhalb von #app.
@@ -120,26 +123,45 @@ function applyTheme() {
 
 // ---------- Neuzeichnen ohne Eingaben oder Taps zu stören ----------
 // render() ersetzt den ganzen Bildschirm. Zwei Regeln:
-// 1. Während ein Finger auf dem Display ist, wird nicht neu gezeichnet. Sonst trifft der click einen ersetzten Button
+// 1. Während ein Tap läuft, wird nicht neu gezeichnet. Sonst trifft der click einen ersetzten Button
 //    (z. B. „Satz fertig“ direkt nach dem Tippen eines Werts: blur → change → render vor dem click).
+//    Bei Touch kommen mousedown, blur, change und click erst NACH pointerup (Pointer Events, Kompatibilitäts-
+//    Mausereignisse). Deshalb gilt ein Tap bis zu seinem click als laufend, höchstens TAP_SETTLE_MS nach pointerup
+//    (Review r5 iOS H-1). Das ausstehende Neuzeichnen folgt direkt nach dem click.
 // 2. Zeitgesteuerte Aktualisierungen (Toast weg, Rückgängig-Fenster vorbei, Pausenende) warten, solange getippt wird.
+const TAP_SETTLE_MS = 450;
 let pointerDown = false;
+let lastPointerUp = -Infinity;
 let tapRenderPending = false;
+let renderedSheet = null; // zuletzt gezeichnetes Sheet (für die Scrollposition in render)
 let softRenderPending = false;
+const flushTapRender = () => { if (tapRenderPending && !pointerDown) render(); };
 document.addEventListener('pointerdown', () => { pointerDown = true; }, true);
 const releasePointer = () => {
   pointerDown = false;
-  if (tapRenderPending) setTimeout(() => { if (tapRenderPending && !pointerDown) render(); }, 120);
+  lastPointerUp = performance.now();
+  if (tapRenderPending) setTimeout(flushTapRender, 120);
 };
 document.addEventListener('pointerup', releasePointer, true);
 document.addEventListener('pointercancel', releasePointer, true);
+// Nach dem click des Taps (dessen Handler läuft zuerst) das aufgeschobene Neuzeichnen nachholen.
+document.addEventListener('click', () => {
+  lastPointerUp = -Infinity;
+  if (tapRenderPending) setTimeout(flushTapRender, 0);
+}, true);
 
 function renderAfterTap() {
-  if (pointerDown) {
+  const settling = performance.now() - lastPointerUp < TAP_SETTLE_MS;
+  if (pointerDown || settling) {
     tapRenderPending = true;
+    // Sicherung, falls kein click mehr kommt (z. B. Tap neben jeden Button).
+    if (settling) setTimeout(flushTapRender, TAP_SETTLE_MS);
     return;
   }
-  render();
+  // Ohne Tap (Tastatur): erst nach dem Fokuswechsel zeichnen, damit render() das neue Feld wieder fokussiert
+  // und Tab nicht ins Leere geht (Review r6 iOS N-2).
+  tapRenderPending = true;
+  setTimeout(flushTapRender, 0);
 }
 const isEditing = () => {
   const a = document.activeElement;
@@ -210,6 +232,7 @@ function openSheet(builder) {
 }
 function closeSheet() {
   S.sheet = null;
+  S.activityDraft = null;
   render();
   const fid = S.sheetReturn;
   S.sheetReturn = null;
@@ -220,6 +243,7 @@ function go(screen) {
   if (screen === 'hist' && S.screen !== 'hist') S.histId = null;
   S.screen = screen;
   S.sheet = null;
+  S.activityDraft = null;
   S.toast = null;
   render();
   window.scrollTo(0, 0);
@@ -239,7 +263,8 @@ function tabs() {
 
 function sheetFrame(title, ...content) {
   return h('div', {
-    class: 'sheet', onclick: (e) => { if (e.target === e.currentTarget) closeSheet(); },
+    // Ein Tap auf den Hintergrund schließt, außer im Sheet wurde schon etwas eingegeben (Review r5 iOS N-2).
+    class: 'sheet', onclick: (e) => { if (e.target === e.currentTarget && !(S.sheet === activitySheet && S.activityDraft?.dirty)) closeSheet(); },
     onkeydown: (e) => { if (e.key === 'Escape') closeSheet(); },
   },
   h('div', { class: 'card', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
@@ -349,6 +374,7 @@ async function copyText(text, okText) {
 function agentSheet(title) {
   const plain = buildAgentPrompt();
   const results = S.file ? resultLines(S.file) : [];
+  const activities = S.file ? activitySummaryLines(S.file, localDate(new Date())) : [];
   const copy = (text) => copyText(text, 'Prompt kopiert.');
   const share = async (text) => {
     try {
@@ -366,8 +392,8 @@ function agentSheet(title) {
       h('button', { class: 'btn sm grow-btn', onclick: () => copy(plain) }, 'Kopieren'),
       h('button', { class: 'btn ghost sm grow-btn', onclick: () => share(plain) }, 'Teilen')),
     S.file ? h('button', { class: 'btn ghost', onclick: () => copy(buildAgentPrompt({ currentPlan: S.file.plan })) }, 'Mit aktuellem Plan kopieren (zum Anpassen)') : null,
-    results.length ? h('button', { class: 'btn ghost', 'data-fid': 'copy-results', onclick: () => copy(buildAgentPrompt({ currentPlan: S.file.plan, results })) }, 'Mit Plan und letzten Ergebnissen kopieren') : null,
-    results.length ? h('p', { class: 'mut small' }, 'Die Ergebnisse (Gewichte, Wiederholungen, Daten) gehen dann ebenfalls an den Anbieter des KI-Dienstes.') : null,
+    results.length || activities.length ? h('button', { class: 'btn ghost', 'data-fid': 'copy-results', onclick: () => copy(buildAgentPrompt({ currentPlan: S.file.plan, results, activities })) }, 'Mit Plan und letzten Ergebnissen kopieren') : null,
+    results.length || activities.length ? h('p', { class: 'mut small' }, `Die Ergebnisse (Gewichte, Wiederholungen, RIR und Datum${activities.length ? ', dazu die anderen Trainings der letzten 4 Wochen' : ''}) gehen dann ebenfalls an den Anbieter des KI-Dienstes.`) : null,
     h('button', { class: 'btn ghost', onclick: () => { S.sheet = null; render(); openFiles(); } }, 'plan.json jetzt öffnen'),
     h('button', { class: 'btn ghost', onclick: closeSheet }, 'Schließen'));
 }
@@ -462,6 +488,7 @@ function importErrorSheet(errors) {
 const ACTION_TEXT = {
   restore: 'Wird als Trainingsstand übernommen.',
   unchanged: 'Entspricht dem gespeicherten Stand. Nichts zu tun.',
+  differs: 'Gleicher Stand-Zähler wie im Browser, aber ein anderer Inhalt (z. B. auf zwei Geräten geändert). Der Stand im Browser bleibt, Abweichungen aus dieser Datei werden nicht übernommen.',
   new: 'Legt eine neue Trainingsdatei mit leerer Historie an.',
 };
 
@@ -482,7 +509,7 @@ function importPreviewSheet() {
       const choice = st.choices[idx] ?? p.defaultChoice;
       const leave = ` Die bisherige Trainingsdatei wird danach aus dem Browser entfernt und liegt nur noch in Dateien${unsavedNow ? ' (die App bietet vorher „Als Datei sichern“ an)' : ''}.`;
       const text = {
-        keep: `Gleiche Trainingsdatei: Der Plan wird ersetzt, du bleibst in Woche ${p.currentWeek}. Deine ${p.historyCount} Trainings bleiben unverändert.`,
+        keep: `Gleiche Trainingsdatei: Der Plan wird ersetzt, du bleibst in Woche ${p.currentWeek}. ${!p.historyCount ? 'Es gibt noch keine Trainings.' : p.historyCount === 1 ? 'Dein Training bleibt unverändert.' : `Deine ${p.historyCount} Trainings bleiben unverändert.`}`,
         successor: `Nächster Durchgang in einer neuen Trainingsdatei ab Woche 1, mit Verweis auf die bisherige. Die letzten Gewichte werden als Startwerte übernommen.${leave}`,
         new: `Neue Trainingsdatei ab Woche 1, ohne Verweis und ohne Startwerte.${leave}`,
       };
@@ -495,10 +522,10 @@ function importPreviewSheet() {
     return h('section', { class: 'card' },
       h('h3', {}, p.name),
       h('p', { class: 'mut small' }, `${p.kind === 'plan' ? 'Plan' : 'Trainingsstand'}: „${sum.planName}“ · ${sum.weeks} Wochen · ${sum.planSessions} Einheiten · ${sum.exercises} Übungen`),
-      sum.history ? h('p', { class: 'mut small' }, sum.history.count ? `${sum.history.count} Trainings (${fmtDay(sum.history.from)} bis ${fmtDay(sum.history.to)})` : 'Noch keine Trainings') : null,
+      sum.history ? h('p', { class: 'mut small' }, historyCountText(sum.history) ? `${historyCountText(sum.history)} (${fmtDay(sum.history.from)} bis ${fmtDay(sum.history.to)})` : 'Noch keine Trainings') : null,
       typeof action === 'string' ? h('p', {}, action) : action);
   });
-  const nothing = st.preview.every((p) => p.action === 'unchanged');
+  const nothing = st.preview.every((p) => p.action === 'unchanged' || p.action === 'differs');
   return sheetFrame('Import prüfen',
     items,
     nothing ? null : h('button', { class: 'btn', 'data-fid': 'import-ok', onclick: confirmImport }, 'Übernehmen'),
@@ -657,7 +684,12 @@ function homeScreen() {
     const ps = nextPlanSession(f);
     nodes.push(nextSessionCard(f, ps));
   }
-  nodes.push(backupCard());
+  // Ist etwas ungesichert, steht der Backup-Hinweis vor der Karte „Anderes Training“ (Review r5 iOS N-3).
+  const st = backupStatus(S.file, S.lastExport);
+  const backupFirst = st.remind || st.unsavedChanges;
+  if (backupFirst) nodes.push(backupCard());
+  if (!S.live) nodes.push(activityCard());
+  if (!backupFirst) nodes.push(backupCard());
   return nodes;
 }
 
@@ -677,6 +709,73 @@ function nextSessionCard(f, ps) {
     f.plan.sessions.length > 1 ? h('button', { class: 'link', onclick: () => openSheet(chooseSessionSheet) }, 'Andere Einheit wählen') : null);
 }
 
+function activityCard() {
+  return h('section', { class: 'card', 'aria-label': 'Anderes Training' },
+    h('p', { class: 'mut small' }, 'Beachvolleyball, Laufen oder anderer Sport? Danach hier eintragen.'),
+    h('button', { class: 'btn ghost', 'data-fid': 'activity-add', onclick: () => openActivitySheet() }, 'Anderes Training eintragen'));
+}
+
+// ---------- Anderes Training eintragen und korrigieren ----------
+
+/** Öffnet das Sheet: ohne id zum Eintragen, mit id zum Korrigieren. */
+function openActivitySheet(id = null) {
+  const today = localDate(new Date());
+  const existing = id ? activitiesOf(S.file).find((a) => a.id === id) : null;
+  if (id && !existing) return;
+  S.activityDraft = activityDraft(today, existing);
+  openSheet(activitySheet);
+}
+
+const AA = {
+  update(patch, { render: how = false } = {}) {
+    if (!S.activityDraft) return;
+    S.activityDraft = { ...S.activityDraft, ...patch, error: null, dirty: true };
+    if (how) render();
+  },
+  announce,
+  cancel() {
+    S.activityDraft = null;
+    closeSheet();
+  },
+  save() {
+    const d = S.activityDraft;
+    if (!d) return;
+    // Felder ohne Neuzeichnen (Datum, Text) direkt aus dem DOM lesen, falls change/input noch aussteht.
+    const dateEl = root.querySelector('#act-date');
+    const typeEl = root.querySelector('#act-type');
+    const draft = { ...d, date: dateEl ? dateEl.value : d.date, type: typeEl ? typeEl.value : d.type };
+    const today = localDate(new Date());
+    const error = activityDraftError(draft, today);
+    if (error) return showActivityError(draft, error);
+    const input = { type: draft.type, date: draft.date, durationMin: draft.durationMin, rpe: draft.rpe, note: draft.note };
+    let next;
+    try {
+      next = draft.id ? updateActivity(S.file, draft.id, input) : addActivity(S.file, input).file;
+    } catch (e) {
+      return showActivityError(draft, e instanceof RangeError ? e.message : 'Die Eingaben passen nicht. Bitte prüfen.');
+    }
+    const changed = next !== S.file;
+    if (changed) setFile(next);
+    closeSheet(); // Fokus zurück auf den auslösenden Button (Review r5 iOS N-4)
+    if (draft.id) showToast(changed ? 'Änderung gespeichert.' : 'Keine Änderung.');
+    else showToast(`${cleanActivityType(input.type)} eingetragen.`);
+  },
+};
+
+/** Meldung im Sheet zeigen und in den sichtbaren Bereich holen (Review r5 iOS M-1). */
+function showActivityError(draft, error) {
+  S.activityDraft = { ...draft, error };
+  render();
+  root.querySelector('.sheet [role="alert"]')?.scrollIntoView({ block: 'center' });
+}
+
+function activitySheet() {
+  const d = S.activityDraft;
+  if (!d) return null;
+  return sheetFrame(d.id ? 'Anderes Training korrigieren' : 'Anderes Training eintragen',
+    ...activitySheetBody(d, { suggestions: activityTypeSuggestions(S.file), today: localDate(new Date()), A: AA }));
+}
+
 function chooseSessionSheet() {
   return sheetFrame('Einheit wählen',
     S.file.plan.sessions.map((ps) => h('button', { class: 'btn ghost', onclick: () => { S.sheet = null; beginLive(ps.key); } }, ps.name)),
@@ -687,7 +786,7 @@ function backupCard() {
   const st = backupStatus(S.file, S.lastExport);
   const n = st.unsavedSessionIds.length;
   let text;
-  if (!S.file.sessions.length) text = 'Noch keine Trainings gespeichert.';
+  if (!S.file.sessions.length && !activitiesOf(S.file).length) text = 'Noch keine Trainings gespeichert.';
   else if (n === 1) text = '1 Training noch nicht gesichert.';
   else if (n > 1) text = `${n} Trainings noch nicht gesichert.`;
   else if (st.unsavedChanges) text = 'Änderungen noch nicht gesichert.';
@@ -725,6 +824,10 @@ const HA = {
   editRpe: () => openSheet(histRpeSheet),
   editSessionNote: () => openSheet(histSessionNoteSheet),
   askDelete: (id) => openSheet(() => deleteSessionSheet(id)),
+  // Ohne laufendes Training: anderes Training eintragen (Entwurf andere Trainingsarten, 4.1).
+  addActivity: () => (S.live ? null : openActivitySheet()),
+  editActivity: (id) => openActivitySheet(id),
+  askDeleteActivity: (id) => openSheet(() => deleteActivitySheet(id)),
 };
 
 // Korrigieren beendeter Trainings im Verlauf. Jede Änderung erhöht die Revision.
@@ -774,7 +877,7 @@ function histNoteSheet(bi) {
   };
   return sheetFrame(`Notiz · ${name}`,
     h('label', { class: 'field', for: 'hist-note' }, h('span', { class: 'mut' }, 'Notiz zur Übung'),
-      h('textarea', { id: 'hist-note', 'data-fid': 'hist-note', maxlength: 2000, rows: 4, value: block.note })),
+      h('textarea', { id: 'hist-note', 'data-fid': 'hist-note', maxlength: LIMITS.maxNote, rows: 4, value: block.note })),
     h('button', { class: 'btn', onclick: save }, 'Speichern'),
     h('button', { class: 'btn ghost', onclick: closeSheet }, 'Abbrechen'));
 }
@@ -817,7 +920,7 @@ function histSessionNoteSheet() {
   };
   return sheetFrame('Notiz zum Training',
     h('label', { class: 'field', for: 'hist-session-note' }, h('span', { class: 'mut' }, 'Notiz zum ganzen Training'),
-      h('textarea', { id: 'hist-session-note', 'data-fid': 'hist-session-note', maxlength: 2000, rows: 4, value: sess.note ?? '' })),
+      h('textarea', { id: 'hist-session-note', 'data-fid': 'hist-session-note', maxlength: LIMITS.maxNote, rows: 4, value: sess.note ?? '' })),
     h('button', { class: 'btn', onclick: save }, 'Speichern'),
     h('button', { class: 'btn ghost', onclick: closeSheet }, 'Abbrechen'));
 }
@@ -837,10 +940,24 @@ function deleteSessionSheet(id) {
     h('button', { class: 'btn ghost', onclick: closeSheet }, 'Abbrechen'));
 }
 
+function deleteActivitySheet(id) {
+  const a = activitiesOf(S.file).find((x) => x.id === id);
+  if (!a) return null;
+  return sheetFrame('Training löschen?',
+    h('p', { class: 'mut' }, `${fmtDay(a.date)} · ${a.type} wird aus dem Verlauf entfernt. Das lässt sich nicht rückgängig machen.`),
+    h('button', { class: 'btn danger', 'data-fid': 'delete-ok', onclick: () => {
+      S.sheet = null;
+      S.histId = null;
+      setFile(deleteActivity(S.file, id));
+      showToast('Training gelöscht.');
+    } }, 'Ja, löschen'),
+    h('button', { class: 'btn ghost', onclick: closeSheet }, 'Abbrechen'));
+}
+
 function histScreen() {
   const backup = backupStatus(S.file, S.lastExport);
   if (S.histId) return historyDetail(S.file, S.histId, backup, HA);
-  return historyList(S.file, backup, { chartExercise: S.chartExercise }, HA);
+  return historyList(S.file, backup, { chartExercise: S.chartExercise, canAddActivity: !S.live }, HA);
 }
 
 // ---------- Live-Training ----------
@@ -861,11 +978,12 @@ function resumeLive() {
   go('live');
 }
 
-function askDiscard() {
+/** Rückfrage vor dem Verwerfen. back: Sheet, zu dem „Abbrechen“ zurückkehrt (z. B. „Training beenden?“, Review r7 iOS N-2). */
+function askDiscard(back = null) {
   openSheet(() => sheetFrame('Training verwerfen?',
     h('p', { class: 'mut' }, 'Alle Sätze dieses Trainings gehen verloren. Das lässt sich nicht rückgängig machen.'),
     h('button', { class: 'btn danger', onclick: discardLive }, 'Ja, verwerfen'),
-    h('button', { class: 'btn ghost', onclick: closeSheet }, 'Abbrechen')));
+    h('button', { class: 'btn ghost', onclick: () => (typeof back === 'function' ? openSheet(back) : closeSheet()) }, 'Abbrechen')));
 }
 
 async function discardLive() {
@@ -1033,7 +1151,7 @@ function optionsSheet(i) {
     h('p', { class: 'mut small' }, `${block.sets.length} Sätze geplant (Vorgabe ${item.plannedSets}).`),
     h('label', { class: 'field', for: noteId }, h('span', { class: 'mut' }, 'Notiz zur Übung'),
       h('textarea', {
-        id: noteId, maxlength: 2000, rows: 3, value: block.note,
+        id: noteId, maxlength: LIMITS.maxNote, rows: 3, value: block.note,
         oninput: (e) => setLive(setNote(S.live, i, e.target.value), { quiet: true }),
         // Nicht sofort neu zeichnen: Sonst geht der Tap auf „Fertig“ oder „Später“ nach dem Tippen verloren.
         onchange: () => renderAfterTap(),
@@ -1067,13 +1185,16 @@ function finishSheet() {
       rpeSlider({ value: S.finishInput?.rpe ?? null, onPick: (v) => { S.finishInput = { ...S.finishInput, rpe: v }; }, fid: 'rpe' }),
       h('label', { class: 'field', for: 'finish-note' }, h('span', { class: 'mut' }, 'Notiz zum Training (optional)'),
         h('textarea', {
-          id: 'finish-note', 'data-fid': 'finish-note', maxlength: 2000, rows: 2, value: S.finishInput?.note ?? '',
+          id: 'finish-note', 'data-fid': 'finish-note', maxlength: LIMITS.maxNote, rows: 2, value: S.finishInput?.note ?? '',
           // Nur merken, nicht neu zeichnen: Sonst geht der Tap auf „Beenden und speichern“ verloren.
           oninput: (e) => { S.finishInput = { ...S.finishInput, note: e.target.value }; },
         }))) : null,
-    any ? h('button', { class: 'btn', 'data-fid': 'finish-save', onclick: finishLiveNow }, 'Beenden und speichern') : h('p', { class: 'mut small' }, 'Noch kein Satz erledigt, es gibt nichts zu speichern.'),
-    h('button', { class: 'btn ghost', onclick: closeSheet }, 'Weiter trainieren'),
-    h('button', { class: 'btn danger', onclick: askDiscard }, 'Training verwerfen'));
+    any ? null : h('p', { class: 'mut small' }, 'Noch kein Satz erledigt, es gibt nichts zu speichern.'),
+    h('button', { class: 'btn danger', onclick: () => askDiscard(finishSheet) }, 'Training verwerfen'),
+    // Hauptaktionen fest unten im Sheet, auch wenn Hinweise den Inhalt verlängern (Review r6 iOS N-1).
+    h('div', { class: 'sheet-actions' },
+      any ? h('button', { class: 'btn', 'data-fid': 'finish-save', onclick: finishLiveNow }, 'Beenden und speichern') : null,
+      h('button', { class: 'btn ghost', onclick: closeSheet }, 'Weiter trainieren')));
 }
 
 let finishing = false;
@@ -1295,6 +1416,8 @@ function render() {
   const focusId = active && active !== document.body ? active.dataset?.fid : lastFid;
   // Falls doch während des Tippens neu gezeichnet wird: Text und Cursor ins neue Feld übernehmen.
   const typed = isEditing() && active.dataset?.fid ? { value: active.value, start: active.selectionStart, end: active.selectionEnd } : null;
+  // Scrollposition eines offenen Sheets halten, wenn dasselbe Sheet neu gezeichnet wird (Review r5 iOS M-1).
+  const sheetScroll = S.sheet && S.sheet === renderedSheet ? root.querySelector('.sheet > .card')?.scrollTop ?? 0 : 0;
   const screen = S.screen === 'live' && !S.live ? 'home' : S.screen;
   let body;
   try {
@@ -1316,6 +1439,9 @@ function render() {
     target.value = typed.value;
     try { target.setSelectionRange(typed.start, typed.end); } catch { /* nicht jedes Feld kennt eine Auswahl */ }
   }
+  renderedSheet = S.sheet;
+  const card = root.querySelector('.sheet > .card');
+  if (card && sheetScroll) card.scrollTop = sheetScroll;
   if (target && !(target.tagName === 'SELECT' && lastPointerType === 'touch')) target.focus({ preventScroll: true });
   scrollToActiveSetOnce(screen);
 }

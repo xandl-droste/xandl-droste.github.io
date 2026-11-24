@@ -4,9 +4,9 @@
 
 Baue eine leichtgewichtige PWA, mit der ich meinen Krafttrainingsplan Einheit für Einheit abarbeite und protokolliere. Die UI ist auf Deutsch. Referenzgerät ist ein iPhone 13 mini (375 × 812 pt, in Safari ca. 630 pt sichtbare Höhe), installiert über "Zum Home-Bildschirm". Die App muss vor allem auf kleinen Handys gut bedienbar sein.
 
-Die App macht genau eines: den geplanten Trainingsplan abarbeitbar machen und die Ergebnisse speichern.
+Die App macht genau eines: den geplanten Trainingsplan abarbeitbar machen und die Ergebnisse speichern. Ab 3.0 lassen sich zusätzlich andere Trainings (z. B. „Beachvolleyball · 90 min · RPE 6“) nachträglich eintragen, damit der KI-Coach die ganze Belastung sieht (Entwurf: `docs/entwurf-andere-trainingsarten.md`).
 
-**Nicht-Ziele (bitte nicht einbauen):** keine Sonderlogik für Körperwerte, kein Tracking einzelner Übungen außerhalb der Sätze, keine Gesundheits- oder Gefühlsabfragen (Ausnahmen ab 2.0, beide freiwillig: RIR nach dem letzten Satz einer Hauptübung und RPE des ganzen Trainings), kein Backend, keine Accounts, kein Auto-Sync.
+**Nicht-Ziele (bitte nicht einbauen):** keine Sonderlogik für Körperwerte, kein Tracking einzelner Übungen außerhalb der Sätze, keine Gesundheits- oder Gefühlsabfragen (Ausnahmen ab 2.0, beide freiwillig: RIR nach dem letzten Satz einer Hauptübung und RPE des ganzen Trainings; ab 3.0 auch die RPE eines anderen Trainings), kein Tracking anderer Sportarten über Trainingsart, Datum, Dauer, RPE und Notiz hinaus (kein Timer, kein Puls, keine Distanz), kein Backend, keine Accounts, kein Auto-Sync.
 
 **Visuelle Vorlage:** Unter `docs/prototyp.html` liegt ein klickbarer Prototyp. Er zeigt Layout, Ablauf, den Stil-Umschalter und das Menü. Übernimm Aufbau und Look, aber nicht den Code: Der Prototyp nutzt `innerHTML` und Dummy-Daten. Fehlt die Datei, frag mich danach, bevor du mit der UI (Schritt 2) beginnst. Schritt 1 kannst du ohne sie erledigen.
 
@@ -40,7 +40,7 @@ Ab 2.0 gibt es pro Durchgang eines Plans eine Trainingsdatei mit dem Namensmuste
 
 ```json
 {
-  "schemaVersion": 2,      // 1.x-Dateien (1) werden gelesen und als 2 weitergeführt
+  "schemaVersion": 3,      // Dateien aus 1.x (1) und 2.x (2) werden gelesen und als 3 weitergeführt
   "fileId": "UUID",
   "revision": 0,
   "updatedAt": "ISO-8601",
@@ -72,7 +72,14 @@ Ab 2.0 gibt es pro Durchgang eines Plans eine Trainingsdatei mit dem Namensmuste
       ]
     }
   ],
-  "deletedSessionIds": [ "UUID" ]   // optional: gelöschte Trainings
+  "activities": [          // optional (ab 3.0): andere Trainings, fehlt, solange es keine gibt
+    { "id": "UUID", "date": "YYYY-MM-DD", "type": "Beachvolleyball", "durationMin": 90,
+      "rpe": 6,            // optional, 0–10
+      "note": "",          // optional
+      "week": 3,           // optional: Planwoche beim Eintragen, nur zur Einordnung
+      "createdAt": "ISO-8601" }
+  ],
+  "deletedSessionIds": [ "UUID" ]   // optional: gelöschte Trainings und andere Trainings
 }
 ```
 
@@ -86,6 +93,7 @@ Regeln:
 - Browserspeicher (ab 2.0): Dort liegt nur die aktive Trainingsdatei (plus laufendes Training und Stand der letzten Sicherung). Bevor eine andere Trainingsdatei aktiv wird (Nachfolger, „Ganz neu“, „Plan erneut starten“, andere `.training.json`), muss die bisherige gesichert sein: Ist sie es nicht, kommt zuerst „Erst sichern“ („Als Datei sichern und weiter“ oder „Abbrechen“). Danach wird sie im selben Schreibvorgang aus dem Browser entfernt. Ältere Trainingsdateien im Browser (aus 1.x) werden beim Start entfernt, wenn sie gesichert sind; ungesicherte bietet die App bei jedem Start zum Sichern an (Sichern, Verwerfen mit Rückfrage, Später).
 - Jedes Training speichert beim Start ihren Durchgang, in Deload-Wochen `deload: true` und pro Block die damals gültige Vorgabe (`plannedSets`, `repsMax` bzw. `durationSec`). Ältere Trainings ohne diese Felder: Durchgang 1, Deload und Vorgabe aus dem aktuellen Plan.
 - Beendete Trainings lassen sich im Verlauf korrigieren (Werte, Notiz) und löschen. Gelöschte Trainings-IDs stehen in `deletedSessionIds` (begrenzt, älteste fallen heraus), damit sie beim Zusammenführen mit älteren Dateien nicht zurückkommen.
+- Andere Trainings (ab 3.0) gehören wie die Trainings der App. Sie zählen nicht für den Abschluss einer Woche, ändern weder Vorbelegung noch Steigerungsvorschlag, erscheinen nicht in der „Zuletzt“-Zeile, gehen nicht in die Startwerte eines Nachfolgers und haben keinen Garmin-Export. Trainingsart 1–60 Zeichen, Dauer 1–600 Minuten in ganzen Minuten, Datum nicht in der Zukunft, höchstens 2000 pro Trainingsdatei. IDs sind über Trainings und andere Trainings eindeutig, weil beide `deletedSessionIds` nutzen. Sortiert nach Datum, am selben Tag nach `createdAt`.
 - Die zuletzt exportierte `revision` und das Datum des letzten Exports speichert die App lokal (IndexedDB). Sie gehören nicht in die exportierte Datei.
 - Abschluss: Nach der letzten Planwoche erscheint der Dialog "Plan abgeschlossen", `status` wird auf `completed` gesetzt und der Export als Archiv angeboten.
 
@@ -93,7 +101,7 @@ Regeln:
 
 - Zwei Dateitypen: reine `plan.json` (vom Agenten) und `.training.json` (Gesamtstand). Mehrfachauswahl ist erlaubt.
 - Eine `plan.json` legt eine neue `.training.json` mit leerer Historie an. Der Import einer `.training.json` stellt alles wieder her, auch bei leerem Browserspeicher.
-- Abgleich bei gleicher `fileId`: Die höhere `revision` gewinnt. Fehlen in der Datei Trainings, die lokal vorhanden sind, werden sie per Trainings-ID zusammengeführt. `deletedSessionIds` beider Stände werden vereinigt, diese Trainings fallen heraus.
+- Abgleich bei gleicher `fileId`: Die höhere `revision` gewinnt. Fehlen in der Datei Trainings oder andere Trainings, die lokal vorhanden sind, werden sie per ID zusammengeführt. `deletedSessionIds` beider Stände werden vereinigt, diese Trainings fallen heraus.
 - Nach jedem Import wird `progress` aus der Historie neu abgeleitet (ohne Dialog „Plan abgeschlossen“).
 - Vor dem Übernehmen gibt es immer eine Vorschau mit Bestätigung: Planname, Anzahl Einheiten und Übungen, bei Trainings deren Anzahl und Zeitraum. Nie stumm überschreiben.
 - Neuer Plan bei vorhandener Trainingsdatei, drei Möglichkeiten (ab 2.0): „Anpassen“ (gleiche Trainingsdatei, Plan ersetzt, gleiche Woche, begrenzt auf die Wochen des neuen Plans, erledigte Trainings bleiben unverändert; deren Übungs- und Variantennamen werden vorher festgehalten), „Nachfolger“ (neue Trainingsdatei ab Woche 1 mit Verweis und Startwerten, ersetzt „Von vorn“) und „Ganz neu“ (neue Trainingsdatei ohne Verweis und ohne Startwerte). Vorbelegt ist „Nachfolger“, wenn der Plan abgeschlossen ist, sonst „Anpassen“. Die Zuordnung läuft über `exerciseId`. Bei „Anpassen“ und „Nachfolger“ zeigt die Vorschau in einer Zeile, wie der neue Plan zur Historie passt, z. B. „9 Übungen mit Verlauf · 4 neu · 3 nicht mehr im Plan“ (eindeutige Übungs-IDs: im neuen Plan mit erledigtem Satz im Verlauf, im neuen Plan ohne Verlauf, mit Verlauf im aktuellen, aber nicht im neuen Plan). Teile mit 0 entfallen, ohne Historie entfällt die Zeile. Nach dem Übernehmen nennt ein Hinweis die Übungs-IDs aus der Historie, die im neuen Plan fehlen.
@@ -103,7 +111,7 @@ Regeln:
 
 - Nach jedem Training: Teilen-Menü mit der `.training.json` und dem Hinweis "In Dateien sichern, bei Rückfrage Ersetzen wählen". Primär `navigator.share({files})`, Fallback Download. Ein Abbruch im Teilen-Menü gilt nicht als Export.
 - Nicht gesicherte Änderungen (`revision` größer als zuletzt exportiert) werden im Verlauf markiert, und beim Start erinnert die App dezent daran. Ebenso nach 7 Tagen ohne Export.
-- „Export für Coach“ (ab 2.0, ersetzt den CSV-Export): schlanker Markdown-Text mit dem Plan (Vorgaben pro Woche, RIR-Ziele, Deload, Hauptübungen) und allen Trainings der Trainingsdatei, neuestes zuerst (Sätze, RIR mit Ziel, RPE, Notizen, Varianten, übersprungene Übungen). Ohne technische Felder (IDs außer Übungs-IDs im Planteil, Zeitstempel, Einstellungen, Startwerte). Teilen als `<trainingsdatei>-coach.md` oder Kopieren. Plan und Trainings sind als Daten gekennzeichnet, Backticks und Zeilenumbrüche aus Namen und Notizen werden entschärft. Hinweis, dass die Daten an den Anbieter des KI-Dienstes gehen.
+- „Export für Coach“ (ab 2.0, ersetzt den CSV-Export): schlanker Markdown-Text mit dem Plan (Vorgaben pro Woche, RIR-Ziele, Deload, Hauptübungen) und allen Trainings der Trainingsdatei, neuestes zuerst (Sätze, RIR mit Ziel, RPE, Notizen, Varianten, übersprungene Übungen). Ab 3.0 stehen andere Trainings nach Datum dazwischen („2026-11-18 Beachvolleyball · W3 · 90 min · RPE 6“, darunter die Notiz), die Legende erklärt sie, wenn es welche gibt. Ohne technische Felder (IDs außer Übungs-IDs im Planteil, Zeitstempel, Einstellungen, Startwerte). Teilen als `<trainingsdatei>-coach.md` oder Kopieren. Plan und Trainings sind als Daten gekennzeichnet, Backticks und Zeilenumbrüche aus Namen und Notizen werden entschärft. Hinweis, dass die Daten an den Anbieter des KI-Dienstes gehen.
 - Die App darf keinen stillen Export vortäuschen. Der Export bleibt klar: ein Button, ein Tap im Teilen-Menü.
 
 ---
@@ -206,9 +214,11 @@ W1–2: 3× 15 s halten · W3: 2×8, 3 s absenken · W4: 2×8, 3 s absenken + 2 
 4. Eine vollständige Beispieldatei mit Superset, einseitiger Übung, Haltezeit-Übung, Variante und `byWeek`-Überschreibung. Die Beispieldatei muss den eigenen Validator bestehen (Unit-Test).
 5. Hinweise: stabile, eindeutige IDs, Zahlen als Zahlen, Deutsch für Namen und Hinweise, Einheiten in kg und Sekunden.
 
-Mit gespeichertem Plan gibt es zusätzlich "Mit aktuellem Plan kopieren (zum Anpassen)" und, sobald es Verlauf gibt, "Mit Plan und letzten Ergebnissen kopieren". Steht der aktuelle Plan im Prompt, gelten ID-Regeln: Übungen, die bleiben, behalten ihre id (Verlauf, Gewichte und Graphen hängen daran), neue Übungen bekommen neue ids, eine bestehende id nie für eine andere Übung, Ziele ändern und Übungen austauschen ist erlaubt. Die Ergebnisse stehen nach dem Plan, eine Zeile pro Übung des Plans mit Verlauf: id, Name, letztes Arbeitsgewicht × Wiederholungen (bzw. Haltezeit oder Wiederholungen bei Körpergewicht), Datum und ob die obere Wiederholungsgrenze in allen Sätzen erreicht wurde, jeweils aus dem letzten Training außerhalb des Deloads. Ohne Notizen. Plan und Ergebnisse sind als reine Daten gekennzeichnet, Backticks darin können den Codeblock nicht beenden. Unter dem Button steht, dass die Ergebnisse an den Anbieter des KI-Dienstes gehen.
+Mit gespeichertem Plan gibt es zusätzlich "Mit aktuellem Plan kopieren (zum Anpassen)" und, sobald es Verlauf gibt, "Mit Plan und letzten Ergebnissen kopieren". Steht der aktuelle Plan im Prompt, gelten ID-Regeln: Übungen, die bleiben, behalten ihre id (Verlauf, Gewichte und Graphen hängen daran), neue Übungen bekommen neue ids, eine bestehende id nie für eine andere Übung, Ziele ändern und Übungen austauschen ist erlaubt. Die Ergebnisse stehen nach dem Plan, eine Zeile pro Übung des Plans mit Verlauf: id, Name, letztes Arbeitsgewicht × Wiederholungen (bzw. Haltezeit oder Wiederholungen bei Körpergewicht), Datum und ob die obere Wiederholungsgrenze in allen Sätzen erreicht wurde, jeweils aus dem letzten Training außerhalb des Deloads. Ohne Notizen. Plan und Ergebnisse sind als reine Daten gekennzeichnet, Backticks darin können den Codeblock nicht beenden. Unter dem Button steht, dass die Ergebnisse an den Anbieter des KI-Dienstes gehen. Ab 3.0 folgt ein eigener Datenblock mit den anderen Trainings der letzten 4 Wochen, pro Trainingsart eine Zeile mit Anzahl, Dauer- und RPE-Spanne (z. B. `"Beachvolleyball": 7× · 60–90 min · RPE 5–7`, ohne Notizen). Die KI soll diese Belastung berücksichtigen, die anderen Trainings aber nicht in den Plan aufnehmen. Der Button erscheint auch, wenn es nur andere Trainings gibt.
 
-**Heute:** Karte "Nächste Einheit" mit Name, "Woche X von Y" (Y = `plan.weeks`), RIR-Ziel, Anzahl Blöcke, geschätzter Dauer und Start-Button. Dazu eine Zeile mit dem letzten beendeten Training: Einheit und wie lange her ("heute", "gestern", "vor N Tagen", Kalendertage in lokaler Zeit), ohne beendetes Training keine Zeile. Bei abgeschlossenem Plan stattdessen die Karte "Plan abgeschlossen" mit "Als Datei sichern" (Archiv), "Nächsten Plan mit KI erstellen" (öffnet den Agent-Prompt) und "Plan erneut starten". Die Formel für die Dauer-Schätzung legst du fest und dokumentierst sie. Darunter der Backup-Status: "Alle Trainings gesichert" oder "1 Training noch nicht gesichert" mit Button.
+**Heute:** Karte "Nächste Einheit" mit Name, "Woche X von Y" (Y = `plan.weeks`), RIR-Ziel, Anzahl Blöcke, geschätzter Dauer und Start-Button. Dazu eine Zeile mit dem letzten beendeten Training: Einheit und wie lange her ("heute", "gestern", "vor N Tagen", Kalendertage in lokaler Zeit), ohne beendetes Training keine Zeile. Bei abgeschlossenem Plan stattdessen die Karte "Plan abgeschlossen" mit "Als Datei sichern" (Archiv), "Nächsten Plan mit KI erstellen" (öffnet den Agent-Prompt) und "Plan erneut starten". Die Formel für die Dauer-Schätzung legst du fest und dokumentierst sie. Darunter (ab 3.0, nicht während eines laufenden Trainings) eine Karte „Anderes Training eintragen“, dann der Backup-Status: "Alle Trainings gesichert" oder "1 Training noch nicht gesichert" mit Button (andere Trainings zählen mit).
+
+**Anderes Training eintragen (ab 3.0):** Sheet mit Trainingsart (Textfeld, darunter bis zu 6 Vorschläge aus der aktiven Trainingsdatei, häufigste zuerst), Datum (vorbelegt mit heute) und Dauer (−/+ in 5-Minuten-Schritten, vorbelegt 60) nebeneinander, RPE (Schieberegler wie beim Abschluss, freiwillig), Notiz (freiwillig), „Speichern“ und „Abbrechen“. Fehlende oder ungültige Angaben nennt eine Meldung im Sheet. Nur mit aktiver Trainingsdatei und nur nachträglich, kein Timer. Dasselbe Sheet dient zum Korrigieren.
 
 **Live-Training:**
 - Kopf: Titel, Fortschritt ("x von y Sätzen") und daneben "Beenden" als Textlink (spart eine Zeile).
@@ -228,6 +238,8 @@ Mit gespeichertem Plan gibt es zusätzlich "Mit aktuellem Plan kopieren (zum Anp
 **Plan:** Plan ansehen (mit Vorgänger, falls vorhanden), aktuelle Woche manuell setzen, Plan öffnen, "Plan mit KI erstellen/anpassen", Gesamtstand sichern, "Export für Coach". Ist die gewählte Woche im aktuellen Durchgang schon geschafft, gibt es einen kurzen Hinweis und "Woche wiederholen". Bei abgeschlossenem Plan (auch auf "Heute") "Plan erneut starten" mit Bestätigung.
 
 **Verlauf (ab 2.0 zusätzlich):** RPE, Notiz zum Training und RIR je Hauptübung werden angezeigt und lassen sich korrigieren. Namen von Übung und Variante kommen aus dem Training, sonst aus dem Plan.
+
+**Verlauf (ab 3.0 zusätzlich):** Oben der Button „Anderes Training eintragen“. Andere Trainings stehen nach Datum in derselben Liste (Trainingsart, „Anderes Training · 90 Min · RPE 6“, Sicherungsstatus). Ihre Detailansicht zeigt Dauer, RPE, Notiz und die Woche des Eintrags, mit „Korrigieren“ und „Training löschen“ (mit Rückfrage). Im Archiv nur lesen, der Kopf zählt sie mit („3 Krafttrainings · 1 anderes Training“).
 
 **Archiv (ab 2.0):** Vierter Tab, auch vom Startbildschirm ohne Plan erreichbar. Öffnet eine Trainingsdatei oder Plandatei nur lesend (geprüft wie beim Import, nie gespeichert, nach einem Neustart leer, die aktive Trainingsdatei bleibt unberührt). Zeigt Datei- und Planname, Anzahl Trainings, Vorgänger, die Trainings mit Graph und Detailansicht (ohne Korrekturen und Löschen) und den Plan mit Wochenwahl. Aktionen: „Export für Coach“ und „Für Garmin exportieren“. Immer nur eine Datei.
 
@@ -262,7 +274,7 @@ Text (Deutsch, wörtlich so übernehmen):
 
 **Überschrift:** Info, Impressum & Datenschutz
 
-**Zweck dieser Seite:** Diese Web-App ist ein rein privates, nicht kommerzielles Projekt zum persönlichen Protokollieren von Krafttraining. Mit der Seite werden keine wirtschaftlichen, politischen, weltanschaulichen oder sonstigen Interessen verfolgt. Es gibt keine Werbung, keine Verkaufsangebote, keine Spendenaufrufe und keine redaktionellen Inhalte.
+**Zweck dieser Seite:** Diese Web-App ist ein rein privates, nicht kommerzielles Projekt zum persönlichen Protokollieren von Krafttraining und anderen Trainings. Mit der Seite werden keine wirtschaftlichen, politischen, weltanschaulichen oder sonstigen Interessen verfolgt. Es gibt keine Werbung, keine Verkaufsangebote, keine Spendenaufrufe und keine redaktionellen Inhalte.
 
 **Betreiber / Offenlegung (§ 25 MedienG):** Medieninhaber und Betreiber: {NAME}, {WOHNORT}, Österreich. Kontakt: {KONTAKT_MAIL}
 
@@ -313,7 +325,7 @@ Außerdem: README mit Hosting-Anleitung (GitHub Pages, Workflow), Installation a
 
 ## 9. Abschluss-Prüfung durch unabhängige Spezial-Instanzen
 
-Wenn die App fertig ist und alle Tests laufen, starte vier Reviewer als getrennte Subagents mit frischem Kontext, parallel (Reviewer 4 Code-Qualität seit Runde 3, in die Spezifikation aufgenommen für 2.0).
+Wenn die App fertig ist und alle Tests laufen, starte vier Reviewer als getrennte Subagents mit frischem Kontext, parallel (Reviewer 4 Code-Qualität seit Runde 3, in die Spezifikation aufgenommen für 2.0). Ab 3.0 gehören die anderen Trainings (Sheet, Verlauf, Coach-Export, Agent-Prompt, Validator und Zusammenführen) zum Prüfumfang aller vier Reviewer.
 
 Jeder Reviewer bekommt NUR: Repo-Pfad, diese Spezifikation, seine Rolle und das Ausgabeformat. Gib ihnen NICHT deine eigene Einschätzung (z. B. "ist sicher", "ist rechtlich in Ordnung"). Die Reviewer arbeiten lesend: keine Änderungen am Code, einzige Ausnahme ist ihre eigene Berichtsdatei unter `reviews/`. Sie dürfen die App lokal starten und testen und im Web recherchieren (mit Quellenangabe).
 

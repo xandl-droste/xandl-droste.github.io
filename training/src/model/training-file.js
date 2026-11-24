@@ -1,7 +1,9 @@
 // Erzeugen, Zusammenführen und Zusammenfassen von .training.json-Dateien.
 // Alle Funktionen sind rein: Sie verändern ihre Eingaben nicht und geben neue Objekte zurück.
 
-import { SCHEMA_VERSION, LIMITS } from './validate.js';
+import { SCHEMA_VERSION, LIMITS, byActivityDate } from './validate.js';
+
+export { byActivityDate };
 import { allExerciseIds, countExercises } from './plan.js';
 import { newId } from './id.js';
 import { localDate } from '../format.js';
@@ -108,6 +110,7 @@ export function unionDeleted(a = [], b = []) {
  * Die höhere revision gewinnt (bei Gleichstand der lokale Stand).
  * Sessions, die nur im unterlegenen Stand vorkommen, werden per ID ergänzt.
  * Gelöschte Sessions (deletedSessionIds beider Stände) fallen heraus und kommen nicht zurück.
+ * Andere Trainings (activities) werden genauso abgeglichen und in addedSessions/removedSessions mitgezählt.
  */
 export function mergeTrainingFiles(local, incoming, now = new Date()) {
   if (local.fileId !== incoming.fileId) throw new Error('mergeTrainingFiles: unterschiedliche fileId');
@@ -116,7 +119,11 @@ export function mergeTrainingFiles(local, incoming, now = new Date()) {
   const loser = incomingWins ? local : incoming;
   const deletedIds = unionDeleted(winner.deletedSessionIds, loser.deletedSessionIds);
   const deleted = new Set([...(winner.deletedSessionIds ?? []), ...(loser.deletedSessionIds ?? [])]);
-  const winnerIds = new Set(winner.sessions.map((s) => s.id));
+  // Eine ID darf nur einmal vorkommen, auch über beide Listen (sonst lehnt der Validator den Stand ab). Die Einträge des
+  // Gewinners gehen vor: Aus dem Verlierer kommt nur dazu, was im Gewinner unter keiner der beiden Listen steht
+  // (Review r5 Code-Qualität N2 / Security N3, r6 Security N1). Kollisionen gibt es nur mit präparierten Dateien.
+  const winnerActs = winner.activities ?? [];
+  const winnerIds = new Set([...winner.sessions.map((s) => s.id), ...winnerActs.map((a) => a.id)]);
   const added = loser.sessions.filter((s) => !winnerIds.has(s.id) && !deleted.has(s.id));
   const kept = winner.sessions.filter((s) => !deleted.has(s.id));
   const removed = winner.sessions.length - kept.length;
@@ -124,17 +131,33 @@ export function mergeTrainingFiles(local, incoming, now = new Date()) {
     || deletedIds.some((id, i) => id !== winner.deletedSessionIds[i]);
   const sessions = [...clone(kept), ...clone(added)].sort(byStart);
   let result = { ...clone(winner), sessions };
+
+  const addedActs = (loser.activities ?? []).filter((a) => !winnerIds.has(a.id) && !deleted.has(a.id));
+  const keptActs = winnerActs.filter((a) => !deleted.has(a.id));
+  const removedActs = winnerActs.length - keptActs.length;
+  const activities = [...clone(keptActs), ...clone(addedActs)].sort(byActivityDate);
+  if (activities.length) result.activities = activities;
+  else delete result.activities;
+
   if (deletedIds.length) result.deletedSessionIds = deletedIds;
   else delete result.deletedSessionIds;
-  const changedWinner = added.length > 0 || removed > 0 || newTombstones;
+  const changedWinner = added.length > 0 || removed > 0 || addedActs.length > 0 || removedActs > 0 || newTombstones;
+  // Einträge des Verlierers, die wegen gelöschter IDs des Gewinners wegfallen, nennt die Vorschau mit (Review r7 Security N1).
+  const loserEntries = [...loser.sessions, ...(loser.activities ?? [])];
+  const droppedFromLoser = loserEntries.filter((x) => deleted.has(x.id) && !winnerIds.has(x.id)).length;
+  // Gleiche Revision, aber anderer Inhalt (z. B. auf zwei Geräten unabhängig geändert): Der lokale Stand gilt, die
+  // Vorschau sagt das, statt „entspricht dem gespeicherten Stand“ (Review r7 Code-Qualität N2).
+  const contentOf = (f) => JSON.stringify([f.plan, f.progress, f.sessions, f.activities ?? [], f.deletedSessionIds ?? []]);
+  const differs = !incomingWins && !changedWinner && incoming.revision === local.revision && contentOf(incoming) !== contentOf(local);
   if (changedWinner) result = bumpRevision({ ...result, revision: Math.max(local.revision, incoming.revision) }, now);
   return {
     file: result,
     winner: incomingWins ? 'incoming' : 'local',
-    addedSessions: added.length,
-    removedSessions: removed,
+    addedSessions: added.length + addedActs.length,
+    removedSessions: removed + removedActs + droppedFromLoser,
     addedFrom: incomingWins ? 'local' : 'incoming',
     changed: incomingWins || changedWinner,
+    differs,
   };
 }
 
@@ -149,18 +172,33 @@ export function deleteSession(file, sessionId, now = new Date()) {
 }
 
 /** Daten für die Import-Vorschau. Nimmt einen Plan oder eine Trainingsdatei. */
-export function summarize({ plan, sessions = null }) {
+export function summarize({ plan, sessions = null, activities = [] }) {
   const ended = (sessions ?? []).filter((s) => s.endedAt);
-  const dates = ended.map((s) => s.date).sort();
+  // Zeitraum über Krafttrainings und andere Trainings (ab 3.0); count zählt nur die Krafttrainings.
+  const dates = [...ended.map((s) => s.date), ...(activities ?? []).map((a) => a.date)].sort();
   return {
     planName: plan.name,
     weeks: plan.weeks,
     planSessions: plan.sessions.length,
     exercises: countExercises(plan),
     history: sessions
-      ? { count: ended.length, from: dates[0] ?? null, to: dates[dates.length - 1] ?? null }
+      ? { count: ended.length, activities: (activities ?? []).length, from: dates[0] ?? null, to: dates[dates.length - 1] ?? null }
       : null,
   };
+}
+
+/**
+ * Anzahl der Trainings als Text für Import-Vorschau und Archiv, z. B. „3 Trainings“ oder, wenn es auch andere
+ * Trainings gibt, „3 Krafttrainings · 1 anderes Training“ („Krafttraining“ nur dann, siehe docs/begriffe.md).
+ * Ohne Trainings null.
+ */
+export function historyCountText(history) {
+  const n = history?.count ?? 0;
+  const a = history?.activities ?? 0;
+  if (!n && !a) return null;
+  if (!a) return `${n} ${n === 1 ? 'Training' : 'Trainings'}`;
+  const other = `${a} ${a === 1 ? 'anderes Training' : 'andere Trainings'}`;
+  return n ? `${n} ${n === 1 ? 'Krafttraining' : 'Krafttrainings'} · ${other}` : other;
 }
 
 /**

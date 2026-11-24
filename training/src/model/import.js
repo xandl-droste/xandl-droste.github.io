@@ -94,16 +94,16 @@ export function previewImport(current, items) {
       if (!active) action = 'restore';
       else if (active.fileId === inc.fileId) {
         merge = mergeTrainingFiles(active, inc);
-        action = merge.changed ? 'merge' : 'unchanged';
+        action = merge.changed ? 'merge' : merge.differs ? 'differs' : 'unchanged';
       } else action = 'switch';
       const out = { name: item.name, kind: 'training', action, summary: sum, revision: inc.revision, localRevision: active?.fileId === inc.fileId ? active.revision : null, merge: merge && { winner: merge.winner, addedSessions: merge.addedSessions, removedSessions: merge.removedSessions, addedFrom: merge.addedFrom } };
-      active = action === 'merge' ? merge.file : action === 'unchanged' ? active : inc;
+      active = action === 'merge' ? merge.file : action === 'unchanged' || action === 'differs' ? active : inc;
       return out;
     }
     const sum = summarize({ plan: item.plan });
     const out = {
       name: item.name, kind: 'plan', action: active ? 'choose' : 'new', summary: sum,
-      historyCount: active ? active.sessions.filter((s) => s.endedAt).length : 0,
+      historyCount: active ? active.sessions.filter((s) => s.endedAt).length + (active.activities?.length ?? 0) : 0,
       defaultChoice: active ? defaultPlanChoice(active) : null,
       currentWeek: active ? Math.min(active.progress.currentWeek, item.plan.weeks) : null,
       cycle: active ? cycleOf(active.progress) : null,
